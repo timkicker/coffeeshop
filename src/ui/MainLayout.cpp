@@ -86,11 +86,11 @@ void MainLayout::handleInput(const Input& input) {
         // Game filter: L2/R2 or ZL/ZR — for now reuse as placeholder
         // TODO: add ZL/ZR for game switching once we have more games
 
-        const auto& mods2 = games[m_selectedGame].mods;
-        if (input.a && !mods2.empty()) {
+        const auto& mods = games[m_selectedGame].mods;
+        if (input.a && !mods.empty()) {
             const auto& game = games[m_selectedGame];
             m_app->pushScreen(std::make_unique<DetailScreen>(
-                m_app, game.mods[m_selectedMod], game.name));
+                m_app, game.mods[m_selectedMod], game.name, game.titleIds));
         }
     }
 }

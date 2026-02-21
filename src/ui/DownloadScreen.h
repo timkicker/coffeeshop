@@ -1,16 +1,16 @@
 #pragma once
 
 #include "Screen.h"
+#include "net/DownloadManager.h"
 #include "net/RepoManager.h"
 #include <SDL2/SDL_ttf.h>
 #include <string>
-#include <vector>
+#include <thread>
 
-class DetailScreen : public Screen {
+class DownloadScreen : public Screen {
 public:
-    DetailScreen(App* app, const Mod& mod, const std::string& gameName,
-                 const std::vector<std::string>& titleIds);
-    ~DetailScreen() override;
+    DownloadScreen(App* app, const Mod& mod, const std::string& titleId);
+    ~DownloadScreen() override;
 
     void onEnter() override;
     void onExit()  override;
@@ -22,17 +22,15 @@ public:
 private:
     void renderText(SDL_Renderer* renderer, const std::string& text,
                     int x, int y, SDL_Color color, TTF_Font* font);
-    void renderWrappedText(SDL_Renderer* renderer, const std::string& text,
-                           int x, int y, int maxW, SDL_Color color, TTF_Font* font);
+    void renderProgressBar(SDL_Renderer* renderer, int x, int y, int w, int h, float progress);
 
-    Mod                      m_mod;
-    std::string              m_gameName;
-    std::vector<std::string> m_titleIds;
+    Mod         m_mod;
+    std::string m_titleId;
+
+    DownloadManager m_dm;
+    std::thread     m_thread;
 
     TTF_Font* m_fontLarge  = nullptr;
     TTF_Font* m_fontNormal = nullptr;
     TTF_Font* m_fontSmall  = nullptr;
-    TTF_Font* m_fontTiny   = nullptr;
-
-    int m_screenshotIndex = 0;
 };

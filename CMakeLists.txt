@@ -3,6 +3,7 @@ project(wiiu_mod_store C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT DEFINED ENV{DEVKITPRO})
+    set(ENV{DEVKITPRO} "/opt/devkitpro")
     message(FATAL_ERROR "DEVKITPRO environment variable not set")
 endif()
 set(DEVKITPRO $ENV{DEVKITPRO})
@@ -58,3 +59,9 @@ wut_create_wuhb(wiiu_mod_store
     ICON  ${CMAKE_SOURCE_DIR}/meta/icon.png
     CONTENT ${CMAKE_SOURCE_DIR}/meta/fonts
 )
+
+if(BUILD_MODE STREQUAL "hw")
+    target_compile_definitions(wiiu_mod_store PRIVATE BUILD_HW=1)
+else()
+    target_compile_definitions(wiiu_mod_store PRIVATE BUILD_HW=0)
+endif()
