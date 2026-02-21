@@ -22,7 +22,21 @@ void DownloadQueueScreen::onEnter() {
 void DownloadQueueScreen::onExit() {}
 
 void DownloadQueueScreen::handleInput(const Input& input) {
-    if (input.b) m_app->popScreen();
+    auto jobs = DownloadQueue::get().jobs();
+
+    if (input.b) {
+        // If selected job is an error, dismiss it; otherwise go back
+        if (!jobs.empty() && m_selectedIdx < (int)jobs.size() &&
+            jobs[m_selectedIdx].state == DownloadJob::State::Error) {
+            DownloadQueue::get().dismissError(m_selectedIdx);
+        } else {
+            m_app->popScreen();
+        }
+        return;
+    }
+
+    if (input.up)   m_selectedIdx = std::max(0, m_selectedIdx - 1);
+    if (input.down) m_selectedIdx = std::min((int)jobs.size() - 1, m_selectedIdx + 1);
 }
 
 void DownloadQueueScreen::update() {}
@@ -62,15 +76,18 @@ void DownloadQueueScreen::render(SDL_Renderer* renderer) {
     }
 
     int y = 70;
+    int rowIdx = 0;
     for (auto& job : jobs) {
         bool isActive = (job.state == DownloadJob::State::Downloading ||
                         job.state == DownloadJob::State::Extracting);
 
+        bool isSelected = (rowIdx == m_selectedIdx);
         // Row background
         SDL_SetRenderDrawColor(renderer, isActive ? 25 : 18, isActive ? 25 : 18, isActive ? 42 : 30, 255);
         SDL_Rect row = {20, y, W - 40, isActive ? 80 : 50};
         SDL_RenderFillRect(renderer, &row);
-        SDL_SetRenderDrawColor(renderer, 40, 40, 60, 255);
+        SDL_Color borderCol = isSelected ? SDL_Color{80,180,255,255} : SDL_Color{40,40,60,255};
+        SDL_SetRenderDrawColor(renderer, borderCol.r, borderCol.g, borderCol.b, 255);
         SDL_RenderDrawRect(renderer, &row);
 
         // Status color + label
@@ -101,12 +118,17 @@ void DownloadQueueScreen::render(SDL_Renderer* renderer) {
         }
 
         y += (isActive ? 80 : 50) + 8;
+        rowIdx++;
         if (y > H - 60) break;
     }
 
     // Bottom hint
-    if (m_fontSmall)
-        renderText(renderer, "B: Back", W/2 - 35, H - 35, grey, m_fontSmall);
+    if (m_fontSmall) {
+        bool errorSelected = !jobs.empty() && m_selectedIdx < (int)jobs.size() &&
+                             jobs[m_selectedIdx].state == DownloadJob::State::Error;
+        std::string hint = errorSelected ? "B: Dismiss error   Up/Down: navigate" : "B: Back   Up/Down: navigate";
+        renderText(renderer, hint, W/2 - 160, H - 35, grey, m_fontSmall);
+    }
 }
 
 void DownloadQueueScreen::renderProgressBar(SDL_Renderer* renderer,

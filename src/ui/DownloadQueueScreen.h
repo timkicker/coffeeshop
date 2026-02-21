@@ -22,6 +22,7 @@ private:
     void renderProgressBar(SDL_Renderer* renderer,
                            int x, int y, int w, int h, float progress);
 
+    int       m_selectedIdx = 0;
     TTF_Font* m_fontLarge  = nullptr;
     TTF_Font* m_fontNormal = nullptr;
     TTF_Font* m_fontSmall  = nullptr;

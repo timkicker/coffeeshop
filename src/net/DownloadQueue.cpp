@@ -68,6 +68,8 @@ void DownloadQueue::cleanupFinished() {
     auto now = std::chrono::steady_clock::now();
     m_jobs.erase(
         std::remove_if(m_jobs.begin(), m_jobs.end(), [&](const DownloadJob& j) {
+            // Only auto-remove Done jobs - Error jobs stay until dismissed by user
+            if (j.state != DownloadJob::State::Done) return false;
             if (!j.hasFinishedAt) return false;
             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                 now - j.finishedAt).count();
@@ -75,6 +77,13 @@ void DownloadQueue::cleanupFinished() {
         }),
         m_jobs.end()
     );
+}
+
+void DownloadQueue::dismissError(int index) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (index >= 0 && index < (int)m_jobs.size() &&
+        m_jobs[index].state == DownloadJob::State::Error)
+        m_jobs.erase(m_jobs.begin() + index);
 }
 
 void DownloadQueue::workerLoop() {

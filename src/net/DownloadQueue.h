@@ -28,6 +28,7 @@ public:
     void enqueue(const Mod& mod, const std::string& titleId);
     std::vector<DownloadJob> jobs();
     int activeCount();
+    void dismissError(int index); // Remove error job at index
     void start();
     void stop();
 
