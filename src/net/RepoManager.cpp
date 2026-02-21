@@ -149,13 +149,17 @@ void RepoManager::parseGame(const std::string& json) {
             }
             Mod mod;
             mod.id          = jm["id"].get<std::string>();
+            // Validate id: only a-z, 0-9, dash, underscore
+            bool validId = !mod.id.empty() && std::all_of(mod.id.begin(), mod.id.end(),
+                [](char c){ return isalnum(c) || c == '-' || c == '_'; });
+            if (!validId) { LOG_WARN("RepoManager: skipping mod with invalid id: %s", mod.id.c_str()); continue; }
             mod.name        = jm["name"].get<std::string>();
             mod.version     = jm["version"].get<std::string>();
             mod.download    = jm["download"].get<std::string>();
             mod.author      = jm.value("author", "Unknown");
             mod.description = jm.value("description", "");
             mod.type        = jm.value("type", "mod");
-                mod.thumbnail   = jm.value("thumbnail", "");
+            mod.thumbnail   = jm.value("thumbnail", "");
 
             if (jm.contains("includes") && jm["includes"].is_array())
                 for (auto& s : jm["includes"]) mod.includes.push_back(s.get<std::string>());

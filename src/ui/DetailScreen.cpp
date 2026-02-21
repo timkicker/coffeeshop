@@ -224,7 +224,7 @@ void DetailScreen::render(SDL_Renderer* renderer) {
 void DetailScreen::renderText(SDL_Renderer* renderer, const std::string& text,
                                int x, int y, SDL_Color color, TTF_Font* font) {
     if (!font || text.empty()) return;
-    SDL_Surface* s = TTF_RenderText_Blended(font, text.c_str(), color);
+    SDL_Surface* s = TTF_RenderUTF8_Blended(font, text.c_str(), color);
     if (!s) return;
     SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
     if (t) {

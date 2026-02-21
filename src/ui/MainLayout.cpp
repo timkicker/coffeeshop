@@ -131,6 +131,18 @@ void MainLayout::handleBrowseInput(const Input& input) {
 void MainLayout::handleInstalledInput(const Input& input) {
     if (m_installedMods.empty()) return;
 
+    // Conflict warning dialog
+    if (m_showConflict) {
+        if (input.a) {
+            // Proceed anyway
+            InstalledScanner::setActive(m_installedMods[m_selectedInstalled], true);
+            m_installedDirty = true;
+            m_showConflict   = false;
+        }
+        if (input.b) m_showConflict = false;
+        return;
+    }
+
     // Confirm uninstall dialog
     if (m_confirmUninstall) {
         if (input.a) {
@@ -147,7 +159,21 @@ void MainLayout::handleInstalledInput(const Input& input) {
 
     if (input.a) {
         auto& mod = m_installedMods[m_selectedInstalled];
-        InstalledScanner::setActive(mod, !mod.active);
+        if (!mod.active) {
+            // Activating - check for conflicts first
+            auto conflict = ConflictChecker::check(mod, m_installedMods);
+            if (conflict.hasConflict) {
+                m_conflictResult = conflict;
+                m_showConflict   = true;
+            } else {
+                InstalledScanner::setActive(mod, true);
+                m_installedDirty = true;
+            }
+        } else {
+            // Deactivating - no conflict check needed
+            InstalledScanner::setActive(mod, false);
+            m_installedDirty = true;
+        }
     }
     if (input.y) {
         m_confirmUninstall = true;
@@ -300,7 +326,7 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
 
         bool isMp = (mod.type == "modpack");
         SDL_Color bb = isMp ? SDL_Color{120,60,180,255} : SDL_Color{40,100,180,255};
-        SDL_Rect badge = {x+CARD_W-(isMp?70:46), y+6, isMp?64:40, 20};
+        SDL_Rect badge = {x+CARD_W-(isMp?82:46), y+6, isMp?76:40, 20};
         SDL_SetRenderDrawColor(renderer, bb.r, bb.g, bb.b, 255);
         SDL_RenderFillRect(renderer, &badge);
         if (m_fontTiny) renderText(renderer, isMp?"MODPACK":"MOD", badge.x+5, badge.y+3, {255,255,255,255}, m_fontTiny);
@@ -316,9 +342,9 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
                 } else {
                     // Installed indicator (small dot)
                     SDL_SetRenderDrawColor(renderer, 40, 160, 80, 255);
-                    SDL_Rect dot = {x+6, y+6, 20, 20};
+                    SDL_Rect dot = {x+6, y+6, 36, 20};
                     SDL_RenderFillRect(renderer, &dot);
-                    if (m_fontTiny) renderText(renderer, "✓", dot.x+4, dot.y+3, {255,255,255,255}, m_fontTiny);
+                    if (m_fontTiny) renderText(renderer, "ON", dot.x+8, dot.y+3, {255,255,255,255}, m_fontTiny);
                 }
                 break;
             }
@@ -397,6 +423,41 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
     if (m_fontTiny) {
         SDL_Color grey = {70, 70, 95, 255};
         renderText(renderer, "A: toggle   Y: uninstall   X: refresh", cx, H-22, grey, m_fontTiny);
+    }
+
+    // Conflict warning overlay
+    if (m_showConflict) {
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
+        SDL_Rect overlay = {0, 0, W, H};
+        SDL_RenderFillRect(renderer, &overlay);
+
+        SDL_SetRenderDrawColor(renderer, 30, 25, 15, 255);
+        SDL_Rect card = {W/2-250, H/2-90, 500, 180};
+        SDL_RenderFillRect(renderer, &card);
+        SDL_SetRenderDrawColor(renderer, 200, 140, 30, 255);
+        SDL_RenderDrawRect(renderer, &card);
+
+        if (m_fontSmall) {
+            renderText(renderer, "Conflict Warning", W/2-210, H/2-78, {255,200,50,255}, m_fontSmall);
+            std::string msg = "This mod conflicts with: ";
+            for (size_t i = 0; i < m_conflictResult.conflictingMods.size(); i++) {
+                if (i > 0) msg += ", ";
+                msg += m_conflictResult.conflictingMods[i];
+            }
+            renderText(renderer, msg, W/2-210, H/2-50, {220,200,150,255}, m_fontSmall);
+            if (!m_conflictResult.conflictingFiles.empty()) {
+                renderText(renderer, "Conflicting files:", W/2-210, H/2-24, {150,140,110,255}, m_fontSmall);
+                int fy = H/2;
+                for (auto& f : m_conflictResult.conflictingFiles) {
+                    if (m_fontTiny) renderText(renderer, "  " + f, W/2-210, fy, {130,120,100,255}, m_fontTiny);
+                    fy += 16;
+                }
+            }
+        }
+        if (m_fontNormal) {
+            renderText(renderer, "A: Activate anyway", W/2-210, H/2+70, {200,140,30,255}, m_fontNormal);
+            renderText(renderer, "B: Cancel",          W/2+60,  H/2+70, {130,130,160,255}, m_fontNormal);
+        }
     }
 
     // Confirm uninstall overlay

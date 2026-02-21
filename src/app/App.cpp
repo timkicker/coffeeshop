@@ -58,6 +58,7 @@ bool App::init() {
 
     pushScreen(std::make_unique<MainLayout>(this));
     CacheManager::cleanupStaleZips();
+    CacheManager::cleanupCorruptMods();
     DownloadQueue::get().start();
 
     return true;

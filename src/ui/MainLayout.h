@@ -4,6 +4,7 @@
 #include "app/Config.h"
 #include "net/RepoManager.h"
 #include "mods/InstalledScanner.h"
+#include "mods/ConflictChecker.h"
 #include <SDL2/SDL_ttf.h>
 #include <string>
 #include <vector>
@@ -64,6 +65,8 @@ private:
     int                       m_selectedInstalled = 0;
     bool                      m_installedDirty    = true;
     bool                      m_confirmUninstall  = false;
+    bool                      m_showConflict      = false;
+    ConflictResult            m_conflictResult;
 
     static constexpr int SIDEBAR_W = 220;
 };

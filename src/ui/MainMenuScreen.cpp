@@ -87,7 +87,7 @@ void MainMenuScreen::render(SDL_Renderer* renderer) {
 void MainMenuScreen::renderText(SDL_Renderer* renderer, const std::string& text,
                                 int x, int y, SDL_Color color, TTF_Font* font) {
     if (!font) return;
-    SDL_Surface* surface = TTF_RenderText_Blended(font, text.c_str(), color);
+    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text.c_str(), color);
     if (!surface) return;
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (texture) {
