@@ -1,7 +1,7 @@
 #include "App.h"
-#include "Input.h"
+#include "app/Input.h"
 #include "ui/Screen.h"
-#include "ui/MainMenuScreen.h"
+#include "ui/MainLayout.h"
 #include "util/Logger.h"
 
 #include <SDL2/SDL.h>
@@ -50,14 +50,13 @@ bool App::init() {
         return false;
     }
 
-    pushScreen(std::make_unique<MainMenuScreen>(this));
+    pushScreen(std::make_unique<MainLayout>(this));
     return true;
 }
 
 void App::run() {
     m_running = true;
     while (m_running && !m_screens.empty()) {
-        // Drain SDL events (needed to keep window alive, but we ignore them for input)
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) m_running = false;
