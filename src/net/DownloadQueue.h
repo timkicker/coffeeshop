@@ -7,6 +7,7 @@
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
+#include <chrono>
 
 struct DownloadJob {
     enum class State { Pending, Downloading, Extracting, Done, Error };
@@ -16,36 +17,31 @@ struct DownloadJob {
     State       state    = State::Pending;
     float       progress = 0.0f;
     std::string error;
+    std::chrono::steady_clock::time_point finishedAt;
+    bool        hasFinishedAt = false;
 };
 
 class DownloadQueue {
 public:
     static DownloadQueue& get() { static DownloadQueue q; return q; }
 
-    // Add a job to the queue. Thread-safe.
     void enqueue(const Mod& mod, const std::string& titleId);
-
-    // Snapshot of all jobs (for rendering). Thread-safe.
     std::vector<DownloadJob> jobs();
-
-    // Number of pending + active jobs
     int activeCount();
-
-    // Start the worker thread (call once at app init)
     void start();
-
-    // Stop the worker thread (call at app shutdown)
     void stop();
 
 private:
     DownloadQueue() = default;
-
     void workerLoop();
     void processJob(DownloadJob& job);
+    void cleanupFinished();
 
-    std::vector<DownloadJob>    m_jobs;
-    std::mutex                  m_mutex;
-    std::condition_variable     m_cv;
-    std::thread                 m_worker;
-    std::atomic<bool>           m_running { false };
+    std::vector<DownloadJob> m_jobs;
+    std::mutex               m_mutex;
+    std::condition_variable  m_cv;
+    std::thread              m_worker;
+    std::atomic<bool>        m_running { false };
+
+    static constexpr int CLEANUP_SECONDS = 30;
 };

@@ -3,6 +3,7 @@
 #include "Screen.h"
 #include "app/Config.h"
 #include "net/RepoManager.h"
+#include "mods/InstalledScanner.h"
 #include <SDL2/SDL_ttf.h>
 #include <string>
 #include <vector>
@@ -31,6 +32,13 @@ private:
     void renderText(SDL_Renderer* renderer, const std::string& text,
                     int x, int y, SDL_Color color, TTF_Font* font);
 
+    // Browse
+    void handleBrowseInput(const Input& input);
+
+    // Installed
+    void handleInstalledInput(const Input& input);
+    void refreshInstalled();
+
     TTF_Font* m_fontNormal = nullptr;
     TTF_Font* m_fontSmall  = nullptr;
     TTF_Font* m_fontTiny   = nullptr;
@@ -41,14 +49,19 @@ private:
     Config m_config;
     bool   m_showOnboarding = false;
 
+    // Browse state
     enum class FetchState { Idle, Loading, Done, Error };
     std::atomic<FetchState> m_fetchState { FetchState::Idle };
     std::thread             m_fetchThread;
     std::mutex              m_repoMutex;
     Repo                    m_repo;
-
     int m_selectedGame = 0;
     int m_selectedMod  = 0;
+
+    // Installed state
+    std::vector<InstalledMod> m_installedMods;
+    int                       m_selectedInstalled = 0;
+    bool                      m_installedDirty    = true; // refresh on next render
 
     static constexpr int SIDEBAR_W = 220;
 };
