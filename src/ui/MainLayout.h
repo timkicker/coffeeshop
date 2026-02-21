@@ -30,6 +30,7 @@ private:
 
     TTF_Font* m_fontNormal = nullptr;
     TTF_Font* m_fontSmall  = nullptr;
+    TTF_Font* m_fontTiny   = nullptr;
 
     enum class Tab { Browse, Installed, Settings };
     Tab m_activeTab = Tab::Browse;
@@ -38,13 +39,11 @@ private:
     RepoManager m_repo;
     bool        m_showOnboarding = false;
 
-    // Async fetch state
     enum class FetchState { Idle, Loading, Done, Error };
     std::atomic<FetchState> m_fetchState { FetchState::Idle };
     std::thread             m_fetchThread;
     std::string             m_fetchError;
 
-    // Browse state
     int m_selectedGame = 0;
     int m_selectedMod  = 0;
 
