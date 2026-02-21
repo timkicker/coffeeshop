@@ -15,13 +15,11 @@ InstallStatus InstallChecker::check(const std::string& modId,
                                      const std::string& repoVersion,
                                      const std::vector<std::string>& titleIds) {
     InstallStatus status;
-    std::string base = Paths::sdcafiineBase();
-
     for (auto& titleId : titleIds) {
-        // Check both active and disabled folder names
+        // Check both active (sdcafiine) and disabled paths
         std::vector<std::string> candidates = {
-            base + "/" + titleId + "/" + modId,
-            base + "/" + titleId + "/.disabled_" + modId
+            Paths::sdcafiineBase() + "/" + titleId + "/" + modId,
+            Paths::disabledBase()  + "/" + titleId + "/" + modId
         };
 
         for (auto& path : candidates) {

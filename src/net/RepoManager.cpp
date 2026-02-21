@@ -81,6 +81,19 @@ void RepoManager::fetch(const std::string& url) {
         auto j = nlohmann::json::parse(body);
         m_repo.name = j.value("name", "Unknown Repo");
 
+        // Format version check
+        int formatVersion = j.value("formatVersion", 1);
+        if (formatVersion < REPO_FORMAT_MIN) {
+            LOG_WARN("RepoManager: repo format %d is older than min supported (%d), continuing anyway",
+                     formatVersion, REPO_FORMAT_MIN);
+        } else if (formatVersion > REPO_FORMAT_MAX) {
+            m_lastError = "Repo requires a newer version of this app (format v"
+                        + std::to_string(formatVersion) + ", app supports up to v"
+                        + std::to_string(REPO_FORMAT_MAX) + ")";
+            LOG_ERROR("RepoManager: %s", m_lastError.c_str());
+            return;
+        }
+
         if (!j.contains("games") || !j["games"].is_array()) {
             m_lastError = "Invalid repo format: missing games array";
             return;

@@ -26,6 +26,10 @@ struct Repo {
     std::vector<Game> games;
 };
 
+// Repo format versions this app understands
+static constexpr int REPO_FORMAT_MIN = 1;
+static constexpr int REPO_FORMAT_MAX = 1;
+
 class RepoManager {
 public:
     // Returns false if URL is invalid format
