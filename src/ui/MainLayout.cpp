@@ -158,7 +158,7 @@ void MainLayout::handleInstalledInput(const Input& input) {
 }
 
 void MainLayout::update() {
-    if (m_activeTab == Tab::Installed && m_installedDirty)
+    if (m_installedDirty)
         refreshInstalled();
 }
 
@@ -304,6 +304,25 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer, bb.r, bb.g, bb.b, 255);
         SDL_RenderFillRect(renderer, &badge);
         if (m_fontTiny) renderText(renderer, isMp?"MODPACK":"MOD", badge.x+5, badge.y+3, {255,255,255,255}, m_fontTiny);
+
+        // Update badge - check if installed version differs from repo version
+        for (auto& inst : m_installedMods) {
+            if (inst.id == mod.id && inst.titleId.size() > 0) {
+                if (!inst.version.empty() && inst.version != mod.version) {
+                    SDL_SetRenderDrawColor(renderer, 180, 110, 20, 255);
+                    SDL_Rect upBadge = {x+6, y+6, 62, 20};
+                    SDL_RenderFillRect(renderer, &upBadge);
+                    if (m_fontTiny) renderText(renderer, "UPDATE", upBadge.x+5, upBadge.y+3, {255,255,255,255}, m_fontTiny);
+                } else {
+                    // Installed indicator (small dot)
+                    SDL_SetRenderDrawColor(renderer, 40, 160, 80, 255);
+                    SDL_Rect dot = {x+6, y+6, 20, 20};
+                    SDL_RenderFillRect(renderer, &dot);
+                    if (m_fontTiny) renderText(renderer, "✓", dot.x+4, dot.y+3, {255,255,255,255}, m_fontTiny);
+                }
+                break;
+            }
+        }
 
         if (m_fontSmall) renderText(renderer, mod.name, x+8, y+100, {220,220,240,255}, m_fontSmall);
         if (m_fontTiny)  renderText(renderer, mod.author+" v"+mod.version, x+8, y+124, {110,110,140,255}, m_fontTiny);
