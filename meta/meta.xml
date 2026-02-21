@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+    <name>Mod Store</name>
+    <coder>Tim</coder>
+    <version>0.1.0</version>
+    <release_date>20250221</release_date>
+    <short_description>Wii U Mod Browser &amp; Manager</short_description>
+    <long_description>Browse, download and manage Wii U game mods via community repositories. Requires Aroma + SDCafiine.</long_description>
+</app>

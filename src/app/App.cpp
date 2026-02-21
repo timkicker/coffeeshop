@@ -1,0 +1,120 @@
+#include "App.h"
+#include "ui/Screen.h"
+#include "ui/MainMenuScreen.h"
+#include "util/Logger.h"
+
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_image.h>
+
+App::App() = default;
+
+App::~App() {
+    if (m_renderer) SDL_DestroyRenderer(m_renderer);
+    if (m_window)   SDL_DestroyWindow(m_window);
+    IMG_Quit();
+    TTF_Quit();
+    SDL_Quit();
+}
+
+bool App::init() {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) != 0) {
+        LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
+        return false;
+    }
+
+    if (TTF_Init() != 0) {
+        LOG_ERROR("TTF_Init failed: %s", TTF_GetError());
+        return false;
+    }
+
+    if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG))) {
+        LOG_ERROR("IMG_Init failed: %s", IMG_GetError());
+        return false;
+    }
+
+    m_window = SDL_CreateWindow(
+        "Wii U Mod Store",
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        m_screenW, m_screenH,
+        SDL_WINDOW_SHOWN
+    );
+
+    if (!m_window) {
+        LOG_ERROR("SDL_CreateWindow failed: %s", SDL_GetError());
+        return false;
+    }
+
+    m_renderer = SDL_CreateRenderer(m_window, -1,
+        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
+    if (!m_renderer) {
+        LOG_ERROR("SDL_CreateRenderer failed: %s", SDL_GetError());
+        return false;
+    }
+
+    // Push initial screen
+    pushScreen(std::make_unique<MainMenuScreen>(this));
+
+    LOG_INFO("App initialized (%dx%d)", m_screenW, m_screenH);
+    return true;
+}
+
+void App::run() {
+    m_running = true;
+
+    while (m_running && !m_screens.empty()) {
+        handleEvents();
+        update();
+        render();
+    }
+}
+
+void App::quit() {
+    m_running = false;
+}
+
+void App::pushScreen(std::unique_ptr<Screen> screen) {
+    screen->onEnter();
+    m_screens.push_back(std::move(screen));
+}
+
+void App::popScreen() {
+    if (!m_screens.empty()) {
+        m_screens.back()->onExit();
+        m_screens.pop_back();
+    }
+    if (m_screens.empty()) {
+        m_running = false;
+    }
+}
+
+void App::handleEvents() {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+            m_running = false;
+            return;
+        }
+        if (!m_screens.empty()) {
+            m_screens.back()->handleEvent(event);
+        }
+    }
+}
+
+void App::update() {
+    if (!m_screens.empty()) {
+        m_screens.back()->update();
+    }
+}
+
+void App::render() {
+    SDL_SetRenderDrawColor(m_renderer, 15, 15, 25, 255); // dark background
+    SDL_RenderClear(m_renderer);
+
+    if (!m_screens.empty()) {
+        m_screens.back()->render(m_renderer);
+    }
+
+    SDL_RenderPresent(m_renderer);
+}

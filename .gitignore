@@ -1,0 +1,22 @@
+# Build output
+build/
+
+# Compiled binaries
+*.elf
+*.rpx
+*.wuhb
+*.o
+*.d
+*.a
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
