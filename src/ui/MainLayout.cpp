@@ -35,6 +35,7 @@ void MainLayout::onEnter() {
             rm.fetch(m_config.repos[0]);
             std::lock_guard<std::mutex> lock(m_repoMutex);
             m_repo       = rm.repo();
+            m_fetchError = rm.lastError();
             m_fetchState = rm.lastError().empty() ? FetchState::Done : FetchState::Error;
         });
     }
@@ -111,17 +112,28 @@ void MainLayout::handleBrowseInput(const Input& input) {
 void MainLayout::handleInstalledInput(const Input& input) {
     if (m_installedMods.empty()) return;
 
+    // Confirm uninstall dialog
+    if (m_confirmUninstall) {
+        if (input.a) {
+            InstalledScanner::remove(m_installedMods[m_selectedInstalled]);
+            m_confirmUninstall = false;
+            m_installedDirty   = true;
+        }
+        if (input.b) m_confirmUninstall = false;
+        return;
+    }
+
     if (input.up)   m_selectedInstalled = std::max(0, m_selectedInstalled - 1);
     if (input.down) m_selectedInstalled = std::min((int)m_installedMods.size()-1, m_selectedInstalled + 1);
 
     if (input.a) {
-        // Toggle active/inactive
         auto& mod = m_installedMods[m_selectedInstalled];
         InstalledScanner::setActive(mod, !mod.active);
     }
-
+    if (input.y) {
+        m_confirmUninstall = true;
+    }
     if (input.x) {
-        // Refresh list
         m_installedDirty = true;
     }
 }
@@ -211,6 +223,7 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
     }
     if (m_fetchState == FetchState::Error) {
         if (m_fontNormal) renderText(renderer, "Failed to load repository.", cx+20, 60, {220,70,70,255}, m_fontNormal);
+        if (m_fontSmall && !m_fetchError.empty()) renderText(renderer, m_fetchError, cx+20, 96, {180,100,100,255}, m_fontSmall);
         return;
     }
 
@@ -336,7 +349,31 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
     // Bottom hints
     if (m_fontTiny) {
         SDL_Color grey = {70, 70, 95, 255};
-        renderText(renderer, "A: toggle active   X: refresh", cx, H-22, grey, m_fontTiny);
+        renderText(renderer, "A: toggle   Y: uninstall   X: refresh", cx, H-22, grey, m_fontTiny);
+    }
+
+    // Confirm uninstall overlay
+    if (m_confirmUninstall && !m_installedMods.empty()) {
+        auto& mod = m_installedMods[m_selectedInstalled];
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
+        SDL_Rect overlay = {0, 0, W, H};
+        SDL_RenderFillRect(renderer, &overlay);
+
+        SDL_SetRenderDrawColor(renderer, 30, 20, 20, 255);
+        SDL_Rect card = {W/2-220, H/2-70, 440, 140};
+        SDL_RenderFillRect(renderer, &card);
+        SDL_SetRenderDrawColor(renderer, 180, 60, 60, 255);
+        SDL_RenderDrawRect(renderer, &card);
+
+        if (m_fontSmall) {
+            std::string msg = "Uninstall "" + (mod.name.empty() ? mod.id : mod.name) + ""?";
+            renderText(renderer, msg,               W/2-180, H/2-50, {255,255,255,255}, m_fontSmall);
+            renderText(renderer, "This deletes the mod folder permanently.", W/2-180, H/2-22, {180,130,130,255}, m_fontSmall);
+        }
+        if (m_fontNormal) {
+            renderText(renderer, "A: Confirm",  W/2-140, H/2+16, {220,70,70,255},   m_fontNormal);
+            renderText(renderer, "B: Cancel",   W/2+20,  H/2+16, {130,130,160,255}, m_fontNormal);
+        }
     }
 }
 

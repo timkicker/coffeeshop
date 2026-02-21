@@ -5,6 +5,7 @@
 #include "ui/MainLayout.h"
 #include "util/Logger.h"
 #include "net/DownloadQueue.h"
+#include "app/CacheManager.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -53,14 +54,7 @@ bool App::init() {
         return false;
     }
 
-    // Check config - show onboarding if no repo configured
-    Config cfg;
-    if (cfg.load() && cfg.hasRepos()) {
-        pushScreen(std::make_unique<MainLayout>(this));
-    } else {
-        pushScreen(std::make_unique<MainLayout>(this));
-    }
-
+    pushScreen(std::make_unique<MainLayout>(this));
     DownloadQueue::get().start();
 
     return true;

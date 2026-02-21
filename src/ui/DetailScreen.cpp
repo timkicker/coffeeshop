@@ -1,8 +1,8 @@
 #include "DetailScreen.h"
-#include "net/DownloadQueue.h"
-#include "ui/RegionSelectScreen.h"
 #include "ui/RegionSelectScreen.h"
 #include "mods/InstallHelper.h"
+#include "mods/InstallChecker.h"
+#include "net/DownloadQueue.h"
 #include "app/App.h"
 
 static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
@@ -23,18 +23,24 @@ void DetailScreen::onEnter() {
     m_fontNormal = TTF_OpenFont(FONT_PATH, 22);
     m_fontSmall  = TTF_OpenFont(FONT_PATH, 17);
     m_fontTiny   = TTF_OpenFont(FONT_PATH, 13);
+
+    m_installStatus = InstallChecker::check(m_mod.id, m_mod.version, m_titleIds);
 }
 
 void DetailScreen::onExit() {}
 
 void DetailScreen::handleInput(const Input& input) {
-    if (input.b) m_app->popScreen();
+    if (input.b) { m_app->popScreen(); return; }
 
     if (input.a && !m_titleIds.empty()) {
+        if (m_installStatus.installed && !m_installStatus.updateAvail) {
+            // Already up to date - A does nothing, user sees the status
+            return;
+        }
         auto entries = InstallHelper::detectInstalled(m_titleIds);
         if (entries.size() == 1) {
             DownloadQueue::get().enqueue(m_mod, entries[0].id);
-            m_app->popScreen(); // back to browse
+            m_app->popScreen();
         } else {
             m_app->pushScreen(std::make_unique<RegionSelectScreen>(
                 m_app, m_mod, entries));
@@ -60,11 +66,14 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     SDL_Color grey   = {130, 130, 155, 255};
     SDL_Color accent = { 80, 180, 255, 255};
     SDL_Color dim    = { 70,  70,  95, 255};
+    SDL_Color green  = { 55, 190,  95, 255};
+    SDL_Color orange = {220, 140,  30, 255};
 
     SDL_SetRenderDrawColor(renderer, 12, 12, 20, 255);
     SDL_Rect fullbg = {0, 0, W, H};
     SDL_RenderFillRect(renderer, &fullbg);
 
+    // Top bar
     SDL_SetRenderDrawColor(renderer, 20, 20, 33, 255);
     SDL_Rect topbar = {0, 0, W, 50};
     SDL_RenderFillRect(renderer, &topbar);
@@ -74,6 +83,7 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     if (m_fontSmall) renderText(renderer, "B  Back", 16, 14, accent, m_fontSmall);
     if (m_fontLarge) renderText(renderer, m_mod.name, 110, 9, white, m_fontLarge);
 
+    // Type badge
     bool isModpack = (m_mod.type == "modpack");
     SDL_Color badgeBg = isModpack ? SDL_Color{110,50,170,255} : SDL_Color{35,90,170,255};
     int titleW = 0;
@@ -84,13 +94,14 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     if (m_fontTiny)
         renderText(renderer, isModpack ? "MODPACK" : "MOD", badge.x+7, badge.y+4, white, m_fontTiny);
 
-    const int MARGIN   = 24;
-    const int SPLIT    = (int)(W * 0.54f);
+    // Layout
+    const int MARGIN    = 24;
+    const int SPLIT     = (int)(W * 0.54f);
     const int CONTENT_Y = 62;
-    const int THUMB_W = SPLIT - MARGIN * 2;
-    const int THUMB_H = (int)(THUMB_W * 9.0f / 16.0f);
-    const int THUMB_X = MARGIN;
-    const int THUMB_Y = CONTENT_Y;
+    const int THUMB_W   = SPLIT - MARGIN * 2;
+    const int THUMB_H   = (int)(THUMB_W * 9.0f / 16.0f);
+    const int THUMB_X   = MARGIN;
+    const int THUMB_Y   = CONTENT_Y;
 
     SDL_SetRenderDrawColor(renderer, 25, 25, 42, 255);
     SDL_Rect thumb = {THUMB_X, THUMB_Y, THUMB_W, THUMB_H};
@@ -98,8 +109,7 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 48, 48, 72, 255);
     SDL_RenderDrawRect(renderer, &thumb);
 
-    int cx = THUMB_X + THUMB_W/2;
-    int cy = THUMB_Y + THUMB_H/2;
+    int cx = THUMB_X + THUMB_W/2, cy = THUMB_Y + THUMB_H/2;
     SDL_SetRenderDrawColor(renderer, 55, 55, 88, 255);
     SDL_RenderDrawLine(renderer, cx-28, cy, cx+28, cy);
     SDL_RenderDrawLine(renderer, cx, cy-28, cx, cy+28);
@@ -107,10 +117,11 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     if (!m_mod.screenshots.empty() && m_fontTiny) {
         std::string ind = std::to_string(m_screenshotIndex+1) + " / "
                         + std::to_string(m_mod.screenshots.size());
-        renderText(renderer, ind,              THUMB_X+THUMB_W/2-18, THUMB_Y+THUMB_H-22, grey, m_fontTiny);
-        renderText(renderer, "< Left / Right >", THUMB_X+THUMB_W/2-52, THUMB_Y+THUMB_H+6, dim, m_fontTiny);
+        renderText(renderer, ind,                THUMB_X+THUMB_W/2-18, THUMB_Y+THUMB_H-22, grey, m_fontTiny);
+        renderText(renderer, "< Left / Right >", THUMB_X+THUMB_W/2-52, THUMB_Y+THUMB_H+6,  dim,  m_fontTiny);
     }
 
+    // Right column
     const int RX = SPLIT + MARGIN;
     const int RW = W - RX - MARGIN;
     int ry = CONTENT_Y;
@@ -128,6 +139,27 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     label("Author");  value(m_mod.author);
     label("Version"); value(m_mod.version);
 
+    // Install status
+    if (m_installStatus.installed) {
+        ry += 4;
+        if (m_installStatus.updateAvail) {
+            SDL_SetRenderDrawColor(renderer, 180, 110, 20, 255);
+            SDL_Rect pill = {RX, ry, 160, 24};
+            SDL_RenderFillRect(renderer, &pill);
+            if (m_fontTiny)
+                renderText(renderer, "UPDATE AVAILABLE  v" + m_installStatus.installedVersion
+                           + " -> v" + m_mod.version, RX+8, ry+5, white, m_fontTiny);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 30, 100, 50, 255);
+            SDL_Rect pill = {RX, ry, 120, 24};
+            SDL_RenderFillRect(renderer, &pill);
+            if (m_fontTiny)
+                renderText(renderer, "INSTALLED  v" + m_installStatus.installedVersion,
+                           RX+8, ry+5, white, m_fontTiny);
+        }
+        ry += 32;
+    }
+
     if (!m_mod.includes.empty()) {
         std::string inc;
         for (auto& s : m_mod.includes) inc += s + ", ";
@@ -144,19 +176,29 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     if (!m_mod.description.empty())
         renderWrappedText(renderer, m_mod.description, RX, ry, RW, {195,195,218,255}, m_fontSmall);
 
+    // Bottom bar
     SDL_SetRenderDrawColor(renderer, 20, 20, 33, 255);
     SDL_Rect bottombar = {0, H-56, W, 56};
     SDL_RenderFillRect(renderer, &bottombar);
     SDL_SetRenderDrawColor(renderer, 45, 45, 65, 255);
     SDL_RenderDrawLine(renderer, 0, H-56, W, H-56);
 
-    SDL_SetRenderDrawColor(renderer, 28, 110, 55, 255);
-    SDL_Rect dlBtn = {W/2-130, H-44, 260, 34};
+    // Action button - changes based on install status
+    bool canInstall = !m_installStatus.installed || m_installStatus.updateAvail;
+    SDL_Color btnBg  = canInstall ? SDL_Color{28,110,55,255} : SDL_Color{40,40,60,255};
+    SDL_Color btnBdr = canInstall ? SDL_Color{55,190,95,255} : SDL_Color{70,70,90,255};
+    std::string btnLabel = m_installStatus.installed
+        ? (m_installStatus.updateAvail ? "A: Update" : "Already installed")
+        : "A: Download & Install";
+
+    SDL_SetRenderDrawColor(renderer, btnBg.r, btnBg.g, btnBg.b, 255);
+    SDL_Rect dlBtn = {W/2-150, H-44, 300, 34};
     SDL_RenderFillRect(renderer, &dlBtn);
-    SDL_SetRenderDrawColor(renderer, 55, 190, 95, 255);
+    SDL_SetRenderDrawColor(renderer, btnBdr.r, btnBdr.g, btnBdr.b, 255);
     SDL_RenderDrawRect(renderer, &dlBtn);
+    SDL_Color btnTxt = canInstall ? white : grey;
     if (m_fontSmall)
-        renderText(renderer, "A: Download & Install", W/2-108, H-38, white, m_fontSmall);
+        renderText(renderer, btnLabel, W/2-120, H-38, btnTxt, m_fontSmall);
 }
 
 void DetailScreen::renderText(SDL_Renderer* renderer, const std::string& text,

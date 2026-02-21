@@ -52,6 +52,7 @@ private:
     // Browse state
     enum class FetchState { Idle, Loading, Done, Error };
     std::atomic<FetchState> m_fetchState { FetchState::Idle };
+    std::string             m_fetchError;
     std::thread             m_fetchThread;
     std::mutex              m_repoMutex;
     Repo                    m_repo;
@@ -61,7 +62,8 @@ private:
     // Installed state
     std::vector<InstalledMod> m_installedMods;
     int                       m_selectedInstalled = 0;
-    bool                      m_installedDirty    = true; // refresh on next render
+    bool                      m_installedDirty    = true;
+    bool                      m_confirmUninstall  = false;
 
     static constexpr int SIDEBAR_W = 220;
 };

@@ -2,6 +2,7 @@
 
 #include "Screen.h"
 #include "net/RepoManager.h"
+#include "mods/InstallChecker.h"
 #include <SDL2/SDL_ttf.h>
 #include <string>
 #include <vector>
@@ -28,11 +29,11 @@ private:
     Mod                      m_mod;
     std::string              m_gameName;
     std::vector<std::string> m_titleIds;
+    int                      m_screenshotIndex = 0;
+    InstallStatus            m_installStatus;
 
     TTF_Font* m_fontLarge  = nullptr;
     TTF_Font* m_fontNormal = nullptr;
     TTF_Font* m_fontSmall  = nullptr;
     TTF_Font* m_fontTiny   = nullptr;
-
-    int m_screenshotIndex = 0;
 };
