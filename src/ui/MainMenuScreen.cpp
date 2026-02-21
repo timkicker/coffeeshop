@@ -28,36 +28,15 @@ void MainMenuScreen::onEnter() {
 
 void MainMenuScreen::onExit() {}
 
-void MainMenuScreen::handleEvent(const SDL_Event& event) {
-    if (event.type == SDL_KEYDOWN) {
-        switch (event.key.keysym.sym) {
-            case SDLK_UP:
-                m_selectedIndex = (m_selectedIndex - 1 + (int)m_items.size()) % (int)m_items.size();
-                break;
-            case SDLK_DOWN:
-                m_selectedIndex = (m_selectedIndex + 1) % (int)m_items.size();
-                break;
-            case SDLK_RETURN:
-                handleSelect();
-                break;
-            default: break;
-        }
-    }
-
-    if (event.type == SDL_CONTROLLERBUTTONDOWN) {
-        switch (event.cbutton.button) {
-            case SDL_CONTROLLER_BUTTON_DPAD_UP:
-                m_selectedIndex = (m_selectedIndex - 1 + (int)m_items.size()) % (int)m_items.size();
-                break;
-            case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
-                m_selectedIndex = (m_selectedIndex + 1) % (int)m_items.size();
-                break;
-            case SDL_CONTROLLER_BUTTON_A:
-                handleSelect();
-                break;
-            default: break;
-        }
-    }
+void MainMenuScreen::handleInput(const Input& input) {
+    if (input.up)
+        m_selectedIndex = (m_selectedIndex - 1 + (int)m_items.size()) % (int)m_items.size();
+    if (input.down)
+        m_selectedIndex = (m_selectedIndex + 1) % (int)m_items.size();
+    if (input.a)
+        handleSelect();
+    if (input.b)
+        m_app->quit();
 }
 
 void MainMenuScreen::handleSelect() {
@@ -101,7 +80,8 @@ void MainMenuScreen::render(SDL_Renderer* renderer) {
         renderText(renderer, m_items[i].label, W/2 - 100, startY + i*spacing, color, m_fontSmall);
     }
 
-    renderText(renderer, "D-Pad: Navigate   A: Select", W/2 - 140, H - 50, grey, m_fontSmall);
+    renderText(renderer, "D-Pad: Navigate   A: Select   B: Quit",
+               W/2 - 180, H - 50, grey, m_fontSmall);
 }
 
 void MainMenuScreen::renderText(SDL_Renderer* renderer, const std::string& text,

@@ -1,6 +1,6 @@
 #pragma once
-
 #include <SDL2/SDL.h>
+#include "app/Input.h"
 
 class App;
 
@@ -12,7 +12,7 @@ public:
     virtual void onEnter() {}
     virtual void onExit()  {}
 
-    virtual void handleEvent(const SDL_Event& event) = 0;
+    virtual void handleInput(const Input& input) = 0;
     virtual void update() = 0;
     virtual void render(SDL_Renderer* renderer) = 0;
 

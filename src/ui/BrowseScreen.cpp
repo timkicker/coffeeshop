@@ -1,6 +1,8 @@
 #include "BrowseScreen.h"
 #include "app/App.h"
 
+static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
+
 BrowseScreen::BrowseScreen(App* app) : Screen(app) {}
 
 BrowseScreen::~BrowseScreen() {
@@ -8,29 +10,25 @@ BrowseScreen::~BrowseScreen() {
 }
 
 void BrowseScreen::onEnter() {
-    m_font = TTF_OpenFont("/vol/content/Roboto-Regular.ttf", 32);
+    m_font = TTF_OpenFont(FONT_PATH, 32);
 }
 
-void BrowseScreen::handleEvent(const SDL_Event& event) {
-    // B button or Escape = back
-    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)
-        m_app->popScreen();
-    if (event.type == SDL_CONTROLLERBUTTONDOWN &&
-        event.cbutton.button == SDL_CONTROLLER_BUTTON_B)
-        m_app->popScreen();
+void BrowseScreen::handleInput(const Input& input) {
+    if (input.b) m_app->popScreen();
 }
 
 void BrowseScreen::update() {}
 
 void BrowseScreen::render(SDL_Renderer* renderer) {
     const int W = m_app->screenWidth();
+    const int H = m_app->screenHeight();
     SDL_Color white = {255, 255, 255, 255};
     SDL_Color grey  = {150, 150, 150, 255};
 
     if (m_font) {
-        renderText(renderer, "Browse Mods", W/2 - 120, 80, white, m_font);
-        renderText(renderer, "(coming soon)", W/2 - 90, 200, grey, m_font);
-        renderText(renderer, "B: Back", 40, m_app->screenHeight() - 50, grey, m_font);
+        renderText(renderer, "Browse Mods",   W/2 - 120, 80,  white, m_font);
+        renderText(renderer, "(coming soon)", W/2 - 100, 200, grey,  m_font);
+        renderText(renderer, "B: Back",       40, H - 50,     grey,  m_font);
     }
 }
 

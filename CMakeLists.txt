@@ -40,6 +40,7 @@ target_link_directories(wiiu_mod_store PRIVATE
     ${SDL2_LIB}
     ${PORTLIBS_PPC}/lib
     ${DEVKITPRO}/wut/lib
+    ${DEVKITPRO}/portlibs/wiiu/lib
 )
 
 target_link_libraries(wiiu_mod_store PRIVATE

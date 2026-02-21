@@ -11,7 +11,6 @@ public:
     App();
     ~App();
 
-    // Non-copyable
     App(const App&) = delete;
     App& operator=(const App&) = delete;
 
@@ -28,18 +27,15 @@ public:
     void popScreen();
 
 private:
-    void handleEvents();
     void update();
     void render();
 
     SDL_Window*   m_window   = nullptr;
     SDL_Renderer* m_renderer = nullptr;
 
-    int m_screenW = 1280;
-    int m_screenH = 720;
-
+    int  m_screenW = 1280;
+    int  m_screenH = 720;
     bool m_running = false;
 
-    // Screen stack: top = active screen
     std::vector<std::unique_ptr<Screen>> m_screens;
 };

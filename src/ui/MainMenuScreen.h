@@ -13,7 +13,7 @@ public:
     void onEnter() override;
     void onExit()  override;
 
-    void handleEvent(const SDL_Event& event) override;
+    void handleInput(const Input& input) override;
     void update() override;
     void render(SDL_Renderer* renderer) override;
 
