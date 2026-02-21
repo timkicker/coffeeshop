@@ -3,6 +3,13 @@
 #include <vector>
 #include <mutex>
 
+// Set to 0 to disable on-screen debug log (e.g. for release builds)
+#ifndef SCREENLOG_ENABLED
+#define SCREENLOG_ENABLED 1
+#endif
+
+#if SCREENLOG_ENABLED
+
 class ScreenLog {
 public:
     static ScreenLog& get() { static ScreenLog s; return s; }
@@ -24,3 +31,17 @@ private:
 };
 
 #define SLOG(x) ScreenLog::get().add(x)
+
+#else
+
+// No-op stubs for release builds
+#define SLOG(x) do {} while(0)
+
+// Dummy class so code that calls ScreenLog::get().lines() still compiles
+class ScreenLog {
+public:
+    static ScreenLog& get() { static ScreenLog s; return s; }
+    std::vector<std::string> lines() { return {}; }
+};
+
+#endif

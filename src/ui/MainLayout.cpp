@@ -31,12 +31,30 @@ void MainLayout::onEnter() {
     if (!m_showOnboarding && !m_config.repos.empty()) {
         m_fetchState = FetchState::Loading;
         m_fetchThread = std::thread([this]() {
-            RepoManager rm;
-            rm.fetch(m_config.repos[0]);
+            Repo combined;
+            std::string lastError;
+
+            for (auto& url : m_config.repos) {
+                RepoManager rm;
+                rm.fetch(url);
+                if (!rm.lastError().empty()) {
+                    lastError = url + ": " + rm.lastError();
+                    LOG_WARN("MainLayout: repo failed: %s", lastError.c_str());
+                    continue;
+                }
+                // Merge games from this repo into combined
+                for (auto& g : rm.repo().games)
+                    combined.games.push_back(g);
+            }
+
             std::lock_guard<std::mutex> lock(m_repoMutex);
-            m_repo       = rm.repo();
-            m_fetchError = rm.lastError();
-            m_fetchState = rm.lastError().empty() ? FetchState::Done : FetchState::Error;
+            m_repo = combined;
+            if (combined.games.empty()) {
+                m_fetchError = lastError.empty() ? "No repos returned any mods" : lastError;
+                m_fetchState = FetchState::Error;
+            } else {
+                m_fetchState = FetchState::Done;
+            }
         });
     }
 }

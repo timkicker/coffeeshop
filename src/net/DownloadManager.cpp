@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <unistd.h>
+#include <dirent.h>
 #include <string>
 #include <vector>
 
@@ -197,12 +198,24 @@ void DownloadManager::run(const std::string& zipUrl,
         return;
     }
 
-    // Verify extract produced files
-    struct stat st;
-    if (stat(destDir.c_str(), &st) != 0) {
-        m_error = "Extract produced no output";
-        m_state = State::Error;
-        return;
+    // Verify extract produced at least one file
+    {
+        int fileCount = 0;
+        DIR* d = opendir(destDir.c_str());
+        if (d) {
+            struct dirent* e;
+            while ((e = readdir(d)) != nullptr) {
+                std::string n = e->d_name;
+                if (n != "." && n != "..") { fileCount++; break; }
+            }
+            closedir(d);
+        }
+        if (fileCount == 0) {
+            rmrf(destDir);
+            m_error = "Extract produced no files";
+            m_state = State::Error;
+            return;
+        }
     }
 
     remove(tmpPath.c_str());
