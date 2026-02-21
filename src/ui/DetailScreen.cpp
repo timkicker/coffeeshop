@@ -1,5 +1,7 @@
 #include "DetailScreen.h"
 #include "ui/DownloadScreen.h"
+#include "ui/RegionSelectScreen.h"
+#include "mods/InstallHelper.h"
 #include "app/App.h"
 
 static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
@@ -28,8 +30,14 @@ void DetailScreen::handleInput(const Input& input) {
     if (input.b) m_app->popScreen();
 
     if (input.a && !m_titleIds.empty()) {
-        m_app->pushScreen(std::make_unique<DownloadScreen>(
-            m_app, m_mod, m_titleIds[0]));
+        auto entries = InstallHelper::detectInstalled(m_titleIds);
+        if (entries.size() == 1) {
+            m_app->pushScreen(std::make_unique<DownloadScreen>(
+                m_app, m_mod, entries[0].id));
+        } else {
+            m_app->pushScreen(std::make_unique<RegionSelectScreen>(
+                m_app, m_mod, entries));
+        }
     }
 
     if (!m_mod.screenshots.empty()) {
@@ -56,7 +64,6 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     SDL_Rect fullbg = {0, 0, W, H};
     SDL_RenderFillRect(renderer, &fullbg);
 
-    // Top bar
     SDL_SetRenderDrawColor(renderer, 20, 20, 33, 255);
     SDL_Rect topbar = {0, 0, W, 50};
     SDL_RenderFillRect(renderer, &topbar);
@@ -66,7 +73,6 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     if (m_fontSmall) renderText(renderer, "B  Back", 16, 14, accent, m_fontSmall);
     if (m_fontLarge) renderText(renderer, m_mod.name, 110, 9, white, m_fontLarge);
 
-    // Badge
     bool isModpack = (m_mod.type == "modpack");
     SDL_Color badgeBg = isModpack ? SDL_Color{110,50,170,255} : SDL_Color{35,90,170,255};
     int titleW = 0;
@@ -77,11 +83,9 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     if (m_fontTiny)
         renderText(renderer, isModpack ? "MODPACK" : "MOD", badge.x+7, badge.y+4, white, m_fontTiny);
 
-    // Layout
     const int MARGIN   = 24;
     const int SPLIT    = (int)(W * 0.54f);
     const int CONTENT_Y = 62;
-
     const int THUMB_W = SPLIT - MARGIN * 2;
     const int THUMB_H = (int)(THUMB_W * 9.0f / 16.0f);
     const int THUMB_X = MARGIN;
@@ -103,10 +107,9 @@ void DetailScreen::render(SDL_Renderer* renderer) {
         std::string ind = std::to_string(m_screenshotIndex+1) + " / "
                         + std::to_string(m_mod.screenshots.size());
         renderText(renderer, ind,              THUMB_X+THUMB_W/2-18, THUMB_Y+THUMB_H-22, grey, m_fontTiny);
-        renderText(renderer, "< Left / Right >", THUMB_X+THUMB_W/2-52, THUMB_Y+THUMB_H+6,  dim,  m_fontTiny);
+        renderText(renderer, "< Left / Right >", THUMB_X+THUMB_W/2-52, THUMB_Y+THUMB_H+6, dim, m_fontTiny);
     }
 
-    // Right column
     const int RX = SPLIT + MARGIN;
     const int RW = W - RX - MARGIN;
     int ry = CONTENT_Y;
@@ -119,7 +122,6 @@ void DetailScreen::render(SDL_Renderer* renderer) {
         if (m_fontNormal) renderText(renderer, v, RX, ry, white, m_fontNormal);
         ry += 30;
     };
-    auto spacer = [&](int px = 10) { ry += px; };
 
     label("Game");    value(m_gameName);
     label("Author");  value(m_mod.author);
@@ -132,16 +134,15 @@ void DetailScreen::render(SDL_Renderer* renderer) {
         label("Includes"); value(inc);
     }
 
-    spacer(6);
+    ry += 6;
     SDL_SetRenderDrawColor(renderer, 38, 38, 58, 255);
     SDL_RenderDrawLine(renderer, RX, ry, RX+RW, ry);
-    spacer(12);
+    ry += 12;
 
     label("Description");
     if (!m_mod.description.empty())
         renderWrappedText(renderer, m_mod.description, RX, ry, RW, {195,195,218,255}, m_fontSmall);
 
-    // Bottom bar
     SDL_SetRenderDrawColor(renderer, 20, 20, 33, 255);
     SDL_Rect bottombar = {0, H-56, W, 56};
     SDL_RenderFillRect(renderer, &bottombar);
