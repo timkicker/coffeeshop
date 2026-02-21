@@ -65,3 +65,5 @@ if(BUILD_MODE STREQUAL "hw")
 else()
     target_compile_definitions(wiiu_mod_store PRIVATE BUILD_HW=0)
 endif()
+
+target_compile_definitions(wiiu_mod_store PRIVATE APP_VERSION="0.1.0")

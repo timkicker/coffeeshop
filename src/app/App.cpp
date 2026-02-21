@@ -1,9 +1,12 @@
 #include "App.h"
 #include "app/Input.h"
 #include "app/Config.h"
+#include "app/Paths.h"
 #include "ui/Screen.h"
 #include "ui/MainLayout.h"
 #include "util/Logger.h"
+#include <cstdarg>
+#include <sys/stat.h>
 #include "net/DownloadQueue.h"
 #include "util/ImageCache.h"
 #include "app/CacheManager.h"
@@ -57,6 +60,10 @@ bool App::init() {
     }
 
     pushScreen(std::make_unique<MainLayout>(this));
+    // Ensure modstore dir exists for log file
+    mkdir((Paths::modstoreBase()).c_str(), 0755);
+    Logger::get().init(Paths::modstoreBase() + "/app.log");
+    LOG_INFO("App started");
     CacheManager::cleanupStaleZips();
     CacheManager::cleanupCorruptMods();
     DownloadQueue::get().start();
