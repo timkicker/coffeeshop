@@ -10,6 +10,10 @@ struct Input {
     bool b     = false;
     bool l     = false;
     bool r     = false;
+    bool y     = false;
+    bool x     = false;
+    bool plus  = false;
+    bool minus = false;
 
     static Input read() {
         Input in;
@@ -25,6 +29,10 @@ struct Input {
             in.b     = btn & VPAD_BUTTON_B;
             in.l     = btn & VPAD_BUTTON_L;
             in.r     = btn & VPAD_BUTTON_R;
+            in.y     = btn & VPAD_BUTTON_Y;
+            in.x     = btn & VPAD_BUTTON_X;
+            in.plus  = btn & VPAD_BUTTON_PLUS;
+            in.minus = btn & VPAD_BUTTON_MINUS;
         }
         return in;
     }

@@ -1,8 +1,10 @@
 #include "App.h"
 #include "app/Input.h"
+#include "app/Config.h"
 #include "ui/Screen.h"
 #include "ui/MainLayout.h"
 #include "util/Logger.h"
+#include "net/DownloadQueue.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -11,6 +13,7 @@
 App::App() = default;
 
 App::~App() {
+    DownloadQueue::get().stop();
     if (m_renderer) SDL_DestroyRenderer(m_renderer);
     if (m_window)   SDL_DestroyWindow(m_window);
     IMG_Quit();
@@ -50,7 +53,16 @@ bool App::init() {
         return false;
     }
 
-    pushScreen(std::make_unique<MainLayout>(this));
+    // Check config - show onboarding if no repo configured
+    Config cfg;
+    if (cfg.load() && cfg.hasRepos()) {
+        pushScreen(std::make_unique<MainLayout>(this));
+    } else {
+        pushScreen(std::make_unique<MainLayout>(this));
+    }
+
+    DownloadQueue::get().start();
+
     return true;
 }
 

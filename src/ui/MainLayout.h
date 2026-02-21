@@ -5,7 +5,9 @@
 #include "net/RepoManager.h"
 #include <SDL2/SDL_ttf.h>
 #include <string>
+#include <vector>
 #include <thread>
+#include <mutex>
 #include <atomic>
 
 class MainLayout : public Screen {
@@ -21,10 +23,11 @@ public:
     void render(SDL_Renderer* renderer) override;
 
 private:
-    void renderOnboarding(SDL_Renderer* renderer);
     void renderSidebar(SDL_Renderer* renderer);
-    void renderContent(SDL_Renderer* renderer);
-    void renderBrowse(SDL_Renderer* renderer, int x, int w, int h);
+    void renderBrowse(SDL_Renderer* renderer);
+    void renderInstalled(SDL_Renderer* renderer);
+    void renderSettings(SDL_Renderer* renderer);
+    void renderOnboarding(SDL_Renderer* renderer);
     void renderText(SDL_Renderer* renderer, const std::string& text,
                     int x, int y, SDL_Color color, TTF_Font* font);
 
@@ -35,14 +38,14 @@ private:
     enum class Tab { Browse, Installed, Settings };
     Tab m_activeTab = Tab::Browse;
 
-    Config      m_config;
-    RepoManager m_repo;
-    bool        m_showOnboarding = false;
+    Config m_config;
+    bool   m_showOnboarding = false;
 
     enum class FetchState { Idle, Loading, Done, Error };
     std::atomic<FetchState> m_fetchState { FetchState::Idle };
     std::thread             m_fetchThread;
-    std::string             m_fetchError;
+    std::mutex              m_repoMutex;
+    Repo                    m_repo;
 
     int m_selectedGame = 0;
     int m_selectedMod  = 0;

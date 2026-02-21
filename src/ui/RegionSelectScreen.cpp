@@ -1,6 +1,6 @@
 #include "RegionSelectScreen.h"
 #include "app/App.h"
-#include "ui/DownloadScreen.h"
+#include "net/DownloadQueue.h"
 
 static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
 
@@ -27,8 +27,9 @@ void RegionSelectScreen::handleInput(const Input& input) {
     if (input.down) m_selected = std::min((int)m_entries.size() - 1, m_selected + 1);
 
     if (input.a) {
-        m_app->pushScreen(std::make_unique<DownloadScreen>(
-            m_app, m_mod, m_entries[m_selected].id));
+        DownloadQueue::get().enqueue(m_mod, m_entries[m_selected].id);
+        m_app->popScreen(); // back to detail
+        m_app->popScreen(); // back to browse
     }
     if (input.b) m_app->popScreen();
 }
@@ -47,7 +48,6 @@ void RegionSelectScreen::render(SDL_Renderer* renderer) {
     SDL_Rect bg = {0, 0, W, H};
     SDL_RenderFillRect(renderer, &bg);
 
-    // Card
     SDL_SetRenderDrawColor(renderer, 22, 22, 35, 255);
     SDL_Rect card = {W/2 - 280, H/2 - 200, 560, 400};
     SDL_RenderFillRect(renderer, &card);
@@ -56,15 +56,12 @@ void RegionSelectScreen::render(SDL_Renderer* renderer) {
 
     if (m_fontLarge)
         renderText(renderer, "Select Region", W/2 - 140, H/2 - 175, white, m_fontLarge);
-
     if (m_fontSmall)
         renderText(renderer, m_mod.name, W/2 - 100, H/2 - 130, grey, m_fontSmall);
 
-    // Divider
     SDL_SetRenderDrawColor(renderer, 50, 50, 70, 255);
     SDL_RenderDrawLine(renderer, W/2 - 240, H/2 - 105, W/2 + 240, H/2 - 105);
 
-    // Entries
     int ey = H/2 - 88;
     for (int i = 0; i < (int)m_entries.size(); i++) {
         bool sel = (i == m_selected);
@@ -90,11 +87,8 @@ void RegionSelectScreen::render(SDL_Renderer* renderer) {
         ey += 55;
     }
 
-    // Bottom hints
-    if (m_fontSmall) {
-        renderText(renderer, "A: Install   B: Cancel",
-                   W/2 - 90, H/2 + 160, grey, m_fontSmall);
-    }
+    if (m_fontSmall)
+        renderText(renderer, "A: Install   B: Cancel", W/2 - 90, H/2 + 160, grey, m_fontSmall);
 }
 
 void RegionSelectScreen::renderText(SDL_Renderer* renderer, const std::string& text,

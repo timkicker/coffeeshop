@@ -1,5 +1,6 @@
 #include "DetailScreen.h"
-#include "ui/DownloadScreen.h"
+#include "net/DownloadQueue.h"
+#include "ui/RegionSelectScreen.h"
 #include "ui/RegionSelectScreen.h"
 #include "mods/InstallHelper.h"
 #include "app/App.h"
@@ -32,8 +33,8 @@ void DetailScreen::handleInput(const Input& input) {
     if (input.a && !m_titleIds.empty()) {
         auto entries = InstallHelper::detectInstalled(m_titleIds);
         if (entries.size() == 1) {
-            m_app->pushScreen(std::make_unique<DownloadScreen>(
-                m_app, m_mod, entries[0].id));
+            DownloadQueue::get().enqueue(m_mod, entries[0].id);
+            m_app->popScreen(); // back to browse
         } else {
             m_app->pushScreen(std::make_unique<RegionSelectScreen>(
                 m_app, m_mod, entries));
