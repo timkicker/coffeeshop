@@ -5,6 +5,10 @@
 #include "net/DownloadQueue.h"
 #include "mods/InstalledScanner.h"
 #include "util/Logger.h"
+#include "app/Paths.h"
+#include <sys/statvfs.h>
+#include <sys/stat.h>
+#include <dirent.h>
 #include "util/ImageCache.h"
 
 static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
@@ -486,17 +490,102 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
 }
 
 void MainLayout::renderSettings(SDL_Renderer* renderer) {
-    const int W = m_app->screenWidth();
-    const int H = m_app->screenHeight();
+    const int W  = m_app->screenWidth();
+    const int H  = m_app->screenHeight();
+    const int CX = SIDEBAR_W + 20;
+    const int VW = W - SIDEBAR_W - 40;
+
     SDL_SetRenderDrawColor(renderer, 15, 15, 25, 255);
     SDL_Rect bg = {SIDEBAR_W, 0, W-SIDEBAR_W, H};
     SDL_RenderFillRect(renderer, &bg);
-    if (m_fontNormal) renderText(renderer, "Settings", SIDEBAR_W+30, 30, {255,255,255,255}, m_fontNormal);
-    if (m_fontSmall) {
-        std::string repo = m_config.repos.empty() ? "None" : m_config.repos[0];
-        renderText(renderer, "Repository:", SIDEBAR_W+30, 80,  {110,110,140,255}, m_fontSmall);
-        renderText(renderer, repo,          SIDEBAR_W+30, 104, {200,200,220,255}, m_fontSmall);
+
+    auto section = [&](const char* title, int& y) {
+        y += 10;
+        if (m_fontSmall) renderText(renderer, title, CX, y, {80,180,255,255}, m_fontSmall);
+        y += 18;
+        SDL_SetRenderDrawColor(renderer, 40, 40, 65, 255);
+        SDL_RenderDrawLine(renderer, CX, y, CX+VW, y);
+        y += 8;
+    };
+    auto row = [&](const char* label, const std::string& value, int& y) {
+        if (m_fontSmall) {
+            renderText(renderer, label, CX+4,   y, {210,210,230,255}, m_fontSmall);
+            renderText(renderer, value, CX+VW/2, y, {130,130,160,255}, m_fontSmall);
+        }
+        y += 28;
+    };
+
+    int y = 10;
+
+    // Repos
+    section("Repos", y);
+    for (auto& url : m_config.repos) {
+        if (m_fontTiny) renderText(renderer, url, CX+4, y, {180,180,210,255}, m_fontTiny);
+        y += 22;
     }
+    row("Config file", Paths::configFile(), y);
+
+    // System
+    section("System", y);
+    struct stat _st;
+    row("SDCafiine folder", stat(Paths::sdcafiineBase().c_str(), &_st)==0 ? "Found" : "Not found", y);
+    row("SD card",          stat(Paths::sdRoot().c_str(),        &_st)==0 ? "Mounted" : "Not detected", y);
+    struct statvfs sv;
+    std::string freeStr = "Unknown";
+    if (statvfs(Paths::sdRoot().c_str(), &sv) == 0) {
+        uint64_t fr = (uint64_t)sv.f_bavail * sv.f_frsize;
+        char buf[32];
+        if (fr < 1024*1024) snprintf(buf,sizeof(buf),"%.1f KB",fr/1024.0);
+        else snprintf(buf,sizeof(buf),"%.1f MB",fr/(1024.0*1024.0));
+        freeStr = buf;
+    }
+    row("Free space", freeStr, y);
+    auto mods = InstalledScanner::scan();
+    int act=0, inact=0;
+    for (auto& m : mods) { if(m.active) act++; else inact++; }
+    row("Installed mods", std::to_string(act)+" active / "+std::to_string(inact)+" inactive", y);
+
+    // Cache
+    section("Cache", y);
+    auto dirSz = [](const std::string& p) -> uint64_t {
+        uint64_t t=0; DIR* d=opendir(p.c_str()); if(!d) return 0;
+        struct dirent* e; while((e=readdir(d))!=nullptr) {
+            std::string n=e->d_name; if(n=="."||n=="..") continue;
+            struct stat s; std::string c=p+"/"+n;
+            if(stat(c.c_str(),&s)==0) t+=S_ISDIR(s.st_mode)?0:s.st_size;
+        } closedir(d); return t;
+    };
+    auto fmtSz = [](uint64_t b) -> std::string {
+        char buf[32];
+        if(b<1024) snprintf(buf,sizeof(buf),"%llu B",(unsigned long long)b);
+        else if(b<1024*1024) snprintf(buf,sizeof(buf),"%.1f KB",b/1024.0);
+        else snprintf(buf,sizeof(buf),"%.1f MB",b/(1024.0*1024.0));
+        return buf;
+    };
+    row("Image cache", fmtSz(dirSz(Paths::cacheDir()+"/images")), y);
+    row("Total cache",  fmtSz(dirSz(Paths::cacheDir())), y);
+
+    // Logs
+    section("Logs", y);
+    row("Log file", Logger::get().path().empty() ? "Not initialized" : Logger::get().path(), y);
+
+    // App
+    section("App", y);
+#ifdef APP_VERSION
+    row("Version", APP_VERSION, y);
+#else
+    row("Version", "unknown", y);
+#endif
+#if BUILD_HW
+    row("Build", "Hardware", y);
+#else
+    row("Build", "Cemu / Debug", y);
+#endif
+    row("Author", "Tim Kicker", y);
+    row("GitHub", "github.com/timkicker/wiiu-mod-store", y);
+
+    if (m_fontTiny)
+        renderText(renderer, "L/R: switch tab", CX, H-22, {70,70,95,255}, m_fontTiny);
 }
 
 void MainLayout::renderOnboarding(SDL_Renderer* renderer) {
