@@ -5,6 +5,7 @@
 #include "ui/MainLayout.h"
 #include "util/Logger.h"
 #include "net/DownloadQueue.h"
+#include "util/ImageCache.h"
 #include "app/CacheManager.h"
 
 #include <SDL2/SDL.h>
@@ -15,6 +16,7 @@ App::App() = default;
 
 App::~App() {
     DownloadQueue::get().stop();
+    if (m_renderer) ImageCache::get().clear(m_renderer);
     if (m_renderer) SDL_DestroyRenderer(m_renderer);
     if (m_window)   SDL_DestroyWindow(m_window);
     IMG_Quit();
@@ -55,6 +57,7 @@ bool App::init() {
     }
 
     pushScreen(std::make_unique<MainLayout>(this));
+    CacheManager::cleanupStaleZips();
     DownloadQueue::get().start();
 
     return true;

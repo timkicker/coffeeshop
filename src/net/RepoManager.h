@@ -10,7 +10,8 @@ struct Mod {
     std::string version;
     std::string description;
     std::string download;
-    std::string type; // "mod" or "modpack"
+    std::string type;      // "mod" or "modpack"
+    std::string thumbnail; // URL
     std::vector<std::string> includes;
     std::vector<std::string> screenshots;
 };

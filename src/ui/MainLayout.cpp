@@ -5,6 +5,7 @@
 #include "net/DownloadQueue.h"
 #include "mods/InstalledScanner.h"
 #include "util/Logger.h"
+#include "util/ImageCache.h"
 
 static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
 static constexpr int CARDS_PER_ROW = 3;
@@ -281,12 +282,21 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer, sel ? 80 : 45, sel ? 180 : 45, sel ? 255 : 65, 255);
         SDL_RenderDrawRect(renderer, &card);
 
-        SDL_SetRenderDrawColor(renderer, 32, 32, 52, 255);
         SDL_Rect thumb = {x+4, y+4, CARD_W-8, 90};
-        SDL_RenderFillRect(renderer, &thumb);
-        SDL_SetRenderDrawColor(renderer, 50, 50, 78, 255);
-        SDL_RenderDrawLine(renderer, x+CARD_W/2-14, y+49, x+CARD_W/2+14, y+49);
-        SDL_RenderDrawLine(renderer, x+CARD_W/2, y+35, x+CARD_W/2, y+63);
+        SDL_Texture* thumbTex = nullptr;
+        if (!mod.thumbnail.empty()) {
+            ImageCache::get().request(mod.thumbnail);
+            thumbTex = ImageCache::get().texture(mod.thumbnail, renderer);
+        }
+        if (thumbTex) {
+            SDL_RenderCopy(renderer, thumbTex, nullptr, &thumb);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 32, 32, 52, 255);
+            SDL_RenderFillRect(renderer, &thumb);
+            SDL_SetRenderDrawColor(renderer, 50, 50, 78, 255);
+            SDL_RenderDrawLine(renderer, x+CARD_W/2-14, y+49, x+CARD_W/2+14, y+49);
+            SDL_RenderDrawLine(renderer, x+CARD_W/2, y+35, x+CARD_W/2, y+63);
+        }
 
         bool isMp = (mod.type == "modpack");
         SDL_Color bb = isMp ? SDL_Color{120,60,180,255} : SDL_Color{40,100,180,255};

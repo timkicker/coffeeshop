@@ -155,6 +155,7 @@ void RepoManager::parseGame(const std::string& json) {
             mod.author      = jm.value("author", "Unknown");
             mod.description = jm.value("description", "");
             mod.type        = jm.value("type", "mod");
+                mod.thumbnail   = jm.value("thumbnail", "");
 
             if (jm.contains("includes") && jm["includes"].is_array())
                 for (auto& s : jm["includes"]) mod.includes.push_back(s.get<std::string>());

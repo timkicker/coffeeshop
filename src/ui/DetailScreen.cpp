@@ -4,6 +4,7 @@
 #include "mods/InstallChecker.h"
 #include "net/DownloadQueue.h"
 #include "app/App.h"
+#include "util/ImageCache.h"
 
 static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
 
@@ -25,6 +26,10 @@ void DetailScreen::onEnter() {
     m_fontTiny   = TTF_OpenFont(FONT_PATH, 13);
 
     m_installStatus = InstallChecker::check(m_mod.id, m_mod.version, m_titleIds);
+
+    // Preload thumbnail + screenshots
+    if (!m_mod.thumbnail.empty()) ImageCache::get().request(m_mod.thumbnail);
+    for (auto& s : m_mod.screenshots) ImageCache::get().request(s);
 }
 
 void DetailScreen::onExit() {}
@@ -103,16 +108,31 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     const int THUMB_X   = MARGIN;
     const int THUMB_Y   = CONTENT_Y;
 
-    SDL_SetRenderDrawColor(renderer, 25, 25, 42, 255);
     SDL_Rect thumb = {THUMB_X, THUMB_Y, THUMB_W, THUMB_H};
-    SDL_RenderFillRect(renderer, &thumb);
-    SDL_SetRenderDrawColor(renderer, 48, 48, 72, 255);
-    SDL_RenderDrawRect(renderer, &thumb);
+    {
+        // Show current screenshot if available, else thumbnail, else placeholder
+        std::string imgUrl;
+        if (!m_mod.screenshots.empty())
+            imgUrl = m_mod.screenshots[m_screenshotIndex];
+        else if (!m_mod.thumbnail.empty())
+            imgUrl = m_mod.thumbnail;
 
-    int cx = THUMB_X + THUMB_W/2, cy = THUMB_Y + THUMB_H/2;
-    SDL_SetRenderDrawColor(renderer, 55, 55, 88, 255);
-    SDL_RenderDrawLine(renderer, cx-28, cy, cx+28, cy);
-    SDL_RenderDrawLine(renderer, cx, cy-28, cx, cy+28);
+        SDL_Texture* imgTex = imgUrl.empty() ? nullptr
+            : ImageCache::get().texture(imgUrl, renderer);
+
+        if (imgTex) {
+            SDL_RenderCopy(renderer, imgTex, nullptr, &thumb);
+        } else {
+            SDL_SetRenderDrawColor(renderer, 25, 25, 42, 255);
+            SDL_RenderFillRect(renderer, &thumb);
+            SDL_SetRenderDrawColor(renderer, 48, 48, 72, 255);
+            SDL_RenderDrawRect(renderer, &thumb);
+            int cx = THUMB_X + THUMB_W/2, cy = THUMB_Y + THUMB_H/2;
+            SDL_SetRenderDrawColor(renderer, 55, 55, 88, 255);
+            SDL_RenderDrawLine(renderer, cx-28, cy, cx+28, cy);
+            SDL_RenderDrawLine(renderer, cx, cy-28, cx, cy+28);
+        }
+    }
 
     if (!m_mod.screenshots.empty() && m_fontTiny) {
         std::string ind = std::to_string(m_screenshotIndex+1) + " / "
