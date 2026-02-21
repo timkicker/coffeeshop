@@ -1,24 +1,26 @@
 #pragma once
 #include <string>
-#include <curl/curl.h>
 #include <atomic>
-#include <functional>
+#include <curl/curl.h>
 
 class DownloadManager {
 public:
     enum class State { Idle, Downloading, Extracting, Done, Error };
 
-    // Download zipUrl, save to tmpPath, then extract to destDir.
-    // Call from a background thread.
     void run(const std::string& zipUrl,
              const std::string& tmpPath,
-             const std::string& destDir);
+             const std::string& destDir,
+             int maxRetries = 2);
 
     State       state()    const { return m_state.load(); }
-    float       progress() const { return m_progress.load(); }  // 0.0 - 1.0
+    float       progress() const { return m_progress.load(); }
     std::string error()    const { return m_error; }
 
 private:
+    bool download(const std::string& zipUrl, const std::string& tmpPath);
+    bool validateZip(const std::string& path);
+    bool checkDiskSpace(const std::string& dir, uint64_t needed);
+
     static int curlProgress(void* userdata, curl_off_t total, curl_off_t now,
                             curl_off_t, curl_off_t);
 
