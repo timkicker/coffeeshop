@@ -55,6 +55,9 @@ target_link_libraries(wiiu_mod_store PRIVATE
     brotlidec
     brotlicommon
     bz2
+    curl
+    mbedtls
+    mbedcrypto
     wut
 )
 

@@ -8,6 +8,8 @@ struct Input {
     bool right = false;
     bool a     = false;
     bool b     = false;
+    bool l     = false;
+    bool r     = false;
 
     static Input read() {
         Input in;
@@ -21,6 +23,8 @@ struct Input {
             in.right = btn & VPAD_BUTTON_RIGHT;
             in.a     = btn & VPAD_BUTTON_A;
             in.b     = btn & VPAD_BUTTON_B;
+            in.l     = btn & VPAD_BUTTON_L;
+            in.r     = btn & VPAD_BUTTON_R;
         }
         return in;
     }

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "Screen.h"
+#include "app/Config.h"
 #include <SDL2/SDL_ttf.h>
 #include <string>
-#include <vector>
 
 class MainLayout : public Screen {
 public:
@@ -18,6 +18,7 @@ public:
     void render(SDL_Renderer* renderer) override;
 
 private:
+    void renderOnboarding(SDL_Renderer* renderer);
     void renderSidebar(SDL_Renderer* renderer);
     void renderContent(SDL_Renderer* renderer);
     void renderText(SDL_Renderer* renderer, const std::string& text,
@@ -29,8 +30,8 @@ private:
     enum class Tab { Browse, Installed, Settings };
     Tab m_activeTab = Tab::Browse;
 
-    // Sidebar focus vs content focus
-    bool m_sidebarFocused = false;
+    Config m_config;
+    bool   m_showOnboarding = false;
 
     static constexpr int SIDEBAR_W = 220;
 };
