@@ -38,6 +38,9 @@ private:
 
     // Installed
     void handleInstalledInput(const Input& input);
+
+    // Settings
+    void handleSettingsInput(const Input& input);
     void refreshInstalled();
 
     TTF_Font* m_fontNormal = nullptr;
@@ -67,6 +70,12 @@ private:
     bool                      m_confirmUninstall  = false;
     bool                      m_showConflict      = false;
     ConflictResult            m_conflictResult;
+
+    // Settings state
+    int                       m_settingsSelected  = 0;
+    int                       m_settingsScroll    = 0;
+    bool                      m_showLog           = false;
+    int                       m_logScroll         = 0;
 
     static constexpr int SIDEBAR_W = 220;
 };

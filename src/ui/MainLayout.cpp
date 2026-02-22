@@ -109,6 +109,7 @@ void MainLayout::handleInput(const Input& input) {
 
     if (m_activeTab == Tab::Browse)    handleBrowseInput(input);
     if (m_activeTab == Tab::Installed) handleInstalledInput(input);
+    if (m_activeTab == Tab::Settings)  handleSettingsInput(input);
 }
 
 void MainLayout::handleBrowseInput(const Input& input) {
@@ -489,6 +490,155 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
     }
 }
 
+
+// Settings item types
+enum class SItemType { Header, Info, Button };
+struct SItem {
+    SItemType   type;
+    std::string label;
+    std::string value;
+};
+
+static std::vector<SItem> buildSettingsItems(const Config& cfg) {
+    std::vector<SItem> items;
+    auto header = [&](const char* t)                          { items.push_back({SItemType::Header, t, ""}); };
+    auto info   = [&](const char* l, const std::string& v)   { items.push_back({SItemType::Info,   l, v});  };
+    auto button = [&](const char* l)                          { items.push_back({SItemType::Button, l, ""}); };
+
+    header("Repos");
+    for (auto& url : cfg.repos) info(url.c_str(), "");
+    info("Config file", Paths::configFile());
+
+    header("System");
+    struct stat _st;
+    info("SDCafiine folder", stat(Paths::sdcafiineBase().c_str(), &_st)==0 ? "Found" : "Not found");
+    info("SD card",          stat(Paths::sdRoot().c_str(),        &_st)==0 ? "Mounted" : "Not detected");
+    struct statvfs sv;
+    std::string freeStr = "Unknown";
+    if (statvfs(Paths::sdRoot().c_str(), &sv) == 0) {
+        uint64_t fr = (uint64_t)sv.f_bavail * sv.f_frsize;
+        char buf[32];
+        if (fr < 1024*1024) snprintf(buf,sizeof(buf),"%.1f KB",fr/1024.0);
+        else snprintf(buf,sizeof(buf),"%.1f MB",fr/(1024.0*1024.0));
+        freeStr = buf;
+    }
+    info("Free space", freeStr);
+    auto mods = InstalledScanner::scan();
+    int act=0, inact=0;
+    for (auto& m : mods) { if(m.active) act++; else inact++; }
+    info("Installed mods", std::to_string(act)+" active / "+std::to_string(inact)+" inactive");
+
+    header("Cache");
+    // Compute cache sizes
+    auto szDir = [](const std::string& p) -> uint64_t {
+        uint64_t t=0; DIR* d=opendir(p.c_str()); if(!d) return 0;
+        struct dirent* e;
+        while((e=readdir(d))!=nullptr) {
+            std::string n=e->d_name; if(n=="."||n=="..") continue;
+            struct stat s; std::string c=p+"/"+n;
+            if(stat(c.c_str(),&s)==0 && !S_ISDIR(s.st_mode)) t+=s.st_size;
+        }
+        closedir(d); return t;
+    };
+    auto fmtSz=[](uint64_t b)->std::string{
+        char buf[32];
+        if(b<1024) snprintf(buf,sizeof(buf),"%llu B",(unsigned long long)b);
+        else if(b<1024*1024) snprintf(buf,sizeof(buf),"%.1f KB",b/1024.0);
+        else snprintf(buf,sizeof(buf),"%.1f MB",b/(1024.0*1024.0));
+        return buf;
+    };
+    info("Image cache", fmtSz(szDir(Paths::cacheDir()+"/images")));
+    info("Total cache",  fmtSz(szDir(Paths::cacheDir())));
+    button("Clear image cache");
+    button("Clear all cache");
+
+    header("Logs");
+    info("Log file", Logger::get().path().empty() ? "Not initialized" : Logger::get().path());
+    button("View log");
+
+    header("App");
+#ifdef APP_VERSION
+    info("Version", APP_VERSION);
+#else
+    info("Version", "unknown");
+#endif
+#if BUILD_HW
+    info("Build", "Hardware");
+#else
+    info("Build", "Cemu / Debug");
+#endif
+    info("Author", "Tim Kicker");
+    info("GitHub", "github.com/timkicker/wiiu-mod-store");
+
+    return items;
+}
+
+void MainLayout::handleSettingsInput(const Input& input) {
+    // Log viewer
+    if (m_showLog) {
+        auto& lines = Logger::get().lines();
+        if (input.up)   m_logScroll = std::max(0, m_logScroll - 1);
+        if (input.down) m_logScroll = std::min(std::max(0,(int)lines.size()-20), m_logScroll+1);
+        if (input.b)    m_showLog = false;
+        return;
+    }
+
+    auto items = buildSettingsItems(m_config);
+
+    auto selectable = [&](int i) {
+        return i >= 0 && i < (int)items.size() && items[i].type != SItemType::Header;
+    };
+
+    if (input.up) {
+        int n = m_settingsSelected - 1;
+        while (n >= 0 && !selectable(n)) n--;
+        if (n >= 0) m_settingsSelected = n;
+    }
+    if (input.down) {
+        int n = m_settingsSelected + 1;
+        while (n < (int)items.size() && !selectable(n)) n++;
+        if (n < (int)items.size()) m_settingsSelected = n;
+    }
+
+    // Scroll
+    if (m_settingsSelected < m_settingsScroll) m_settingsScroll = m_settingsSelected;
+    if (m_settingsSelected >= m_settingsScroll + 16) m_settingsScroll = m_settingsSelected - 15;
+
+    if (input.a && selectable(m_settingsSelected) &&
+        items[m_settingsSelected].type == SItemType::Button) {
+        std::string label = items[m_settingsSelected].label;
+
+        if (label == "Clear image cache") {
+            std::string imgDir = Paths::cacheDir() + "/images";
+            DIR* d = opendir(imgDir.c_str());
+            if (d) { struct dirent* e;
+                while((e=readdir(d))!=nullptr) {
+                    std::string n=e->d_name; if(n=="."||n=="..") continue;
+                    remove((imgDir+"/"+n).c_str());
+                } closedir(d);
+            }
+            ImageCache::get().clear(nullptr);
+            LOG_INFO("Settings: image cache cleared");
+        }
+        else if (label == "Clear all cache") {
+            std::string dir = Paths::cacheDir();
+            DIR* d = opendir(dir.c_str());
+            if (d) { struct dirent* e;
+                while((e=readdir(d))!=nullptr) {
+                    std::string n=e->d_name; if(n=="."||n=="..") continue;
+                    remove((dir+"/"+n).c_str());
+                } closedir(d);
+            }
+            ImageCache::get().clear(nullptr);
+            LOG_INFO("Settings: full cache cleared");
+        }
+        else if (label == "View log") {
+            m_showLog   = true;
+            m_logScroll = std::max(0,(int)Logger::get().lines().size()-20);
+        }
+    }
+}
+
 void MainLayout::renderSettings(SDL_Renderer* renderer) {
     const int W  = m_app->screenWidth();
     const int H  = m_app->screenHeight();
@@ -499,93 +649,75 @@ void MainLayout::renderSettings(SDL_Renderer* renderer) {
     SDL_Rect bg = {SIDEBAR_W, 0, W-SIDEBAR_W, H};
     SDL_RenderFillRect(renderer, &bg);
 
-    auto section = [&](const char* title, int& y) {
-        y += 10;
-        if (m_fontSmall) renderText(renderer, title, CX, y, {80,180,255,255}, m_fontSmall);
-        y += 18;
-        SDL_SetRenderDrawColor(renderer, 40, 40, 65, 255);
-        SDL_RenderDrawLine(renderer, CX, y, CX+VW, y);
-        y += 8;
-    };
-    auto row = [&](const char* label, const std::string& value, int& y) {
-        if (m_fontSmall) {
-            renderText(renderer, label, CX+4,   y, {210,210,230,255}, m_fontSmall);
-            renderText(renderer, value, CX+VW/2, y, {130,130,160,255}, m_fontSmall);
+    // Log overlay
+    if (m_showLog) {
+        SDL_SetRenderDrawColor(renderer, 8, 8, 14, 245);
+        SDL_RenderFillRect(renderer, &bg);
+        if (m_fontSmall) renderText(renderer, "Log Viewer   B: Close   Up/Down: scroll", CX, 14, {80,180,255,255}, m_fontSmall);
+        SDL_SetRenderDrawColor(renderer, 25, 25, 40, 255);
+        SDL_Rect logBg = {SIDEBAR_W+10, 40, VW+10, H-50};
+        SDL_RenderFillRect(renderer, &logBg);
+        auto& lines = Logger::get().lines();
+        int vis = (H - 60) / 16;
+        int y = 46;
+        for (int i = m_logScroll; i < (int)lines.size() && i < m_logScroll+vis; i++) {
+            SDL_Color col = {180,180,200,255};
+            if (lines[i].find("ERROR") != std::string::npos) col = {220,70,70,255};
+            else if (lines[i].find("WARN") != std::string::npos) col = {220,180,50,255};
+            if (m_fontTiny) renderText(renderer, lines[i], CX, y, col, m_fontTiny);
+            y += 16;
         }
-        y += 28;
-    };
-
-    int y = 10;
-
-    // Repos
-    section("Repos", y);
-    for (auto& url : m_config.repos) {
-        if (m_fontTiny) renderText(renderer, url, CX+4, y, {180,180,210,255}, m_fontTiny);
-        y += 22;
+        std::string pg = std::to_string(m_logScroll+1)+"/"+std::to_string(std::max(1,(int)lines.size()));
+        if (m_fontTiny) renderText(renderer, pg, W-80, H-20, {80,80,110,255}, m_fontTiny);
+        return;
     }
-    row("Config file", Paths::configFile(), y);
 
-    // System
-    section("System", y);
-    struct stat _st;
-    row("SDCafiine folder", stat(Paths::sdcafiineBase().c_str(), &_st)==0 ? "Found" : "Not found", y);
-    row("SD card",          stat(Paths::sdRoot().c_str(),        &_st)==0 ? "Mounted" : "Not detected", y);
-    struct statvfs sv;
-    std::string freeStr = "Unknown";
-    if (statvfs(Paths::sdRoot().c_str(), &sv) == 0) {
-        uint64_t fr = (uint64_t)sv.f_bavail * sv.f_frsize;
-        char buf[32];
-        if (fr < 1024*1024) snprintf(buf,sizeof(buf),"%.1f KB",fr/1024.0);
-        else snprintf(buf,sizeof(buf),"%.1f MB",fr/(1024.0*1024.0));
-        freeStr = buf;
+    auto items = buildSettingsItems(m_config);
+
+    const int ITEM_H = 32;
+    int y = 8;
+
+    for (int i = m_settingsScroll; i < (int)items.size() && y < H-30; i++) {
+        auto& item = items[i];
+        bool selected = (i == m_settingsSelected);
+
+        if (item.type == SItemType::Header) {
+            y += 8;
+            if (m_fontSmall) renderText(renderer, item.label, CX, y, {80,180,255,255}, m_fontSmall);
+            y += 18;
+            SDL_SetRenderDrawColor(renderer, 40, 40, 65, 255);
+            SDL_RenderDrawLine(renderer, CX, y, CX+VW, y);
+            y += 6;
+            continue;
+        }
+
+        if (selected) {
+            SDL_SetRenderDrawColor(renderer, 28, 48, 78, 255);
+            SDL_Rect row = {SIDEBAR_W+6, y-2, W-SIDEBAR_W-12, ITEM_H-4};
+            SDL_RenderFillRect(renderer, &row);
+            SDL_SetRenderDrawColor(renderer, 80,180,255,255);
+            SDL_RenderDrawRect(renderer, &row);
+        }
+
+        SDL_Color labelCol = item.type == SItemType::Button
+            ? SDL_Color{100,200,120,255}
+            : SDL_Color{210,210,230,255};
+
+        if (m_fontSmall) renderText(renderer, item.label, CX+6, y+6, labelCol, m_fontSmall);
+        if (!item.value.empty() && m_fontSmall)
+            renderText(renderer, item.value, CX+VW/2, y+6, {130,130,160,255}, m_fontSmall);
+
+        y += ITEM_H;
     }
-    row("Free space", freeStr, y);
-    auto mods = InstalledScanner::scan();
-    int act=0, inact=0;
-    for (auto& m : mods) { if(m.active) act++; else inact++; }
-    row("Installed mods", std::to_string(act)+" active / "+std::to_string(inact)+" inactive", y);
 
-    // Cache
-    section("Cache", y);
-    auto dirSz = [](const std::string& p) -> uint64_t {
-        uint64_t t=0; DIR* d=opendir(p.c_str()); if(!d) return 0;
-        struct dirent* e; while((e=readdir(d))!=nullptr) {
-            std::string n=e->d_name; if(n=="."||n=="..") continue;
-            struct stat s; std::string c=p+"/"+n;
-            if(stat(c.c_str(),&s)==0) t+=S_ISDIR(s.st_mode)?0:s.st_size;
-        } closedir(d); return t;
-    };
-    auto fmtSz = [](uint64_t b) -> std::string {
-        char buf[32];
-        if(b<1024) snprintf(buf,sizeof(buf),"%llu B",(unsigned long long)b);
-        else if(b<1024*1024) snprintf(buf,sizeof(buf),"%.1f KB",b/1024.0);
-        else snprintf(buf,sizeof(buf),"%.1f MB",b/(1024.0*1024.0));
-        return buf;
-    };
-    row("Image cache", fmtSz(dirSz(Paths::cacheDir()+"/images")), y);
-    row("Total cache",  fmtSz(dirSz(Paths::cacheDir())), y);
-
-    // Logs
-    section("Logs", y);
-    row("Log file", Logger::get().path().empty() ? "Not initialized" : Logger::get().path(), y);
-
-    // App
-    section("App", y);
-#ifdef APP_VERSION
-    row("Version", APP_VERSION, y);
-#else
-    row("Version", "unknown", y);
-#endif
-#if BUILD_HW
-    row("Build", "Hardware", y);
-#else
-    row("Build", "Cemu / Debug", y);
-#endif
-    row("Author", "Tim Kicker", y);
-    row("GitHub", "github.com/timkicker/wiiu-mod-store", y);
-
-    if (m_fontTiny)
-        renderText(renderer, "L/R: switch tab", CX, H-22, {70,70,95,255}, m_fontTiny);
+    if (m_fontTiny) {
+        bool onBtn = m_settingsSelected < (int)items.size() &&
+                     items[m_settingsSelected].type == SItemType::Button;
+        std::string hint = onBtn
+            ? "A: Execute   B: Back   Up/Down: navigate   L/R: switch tab"
+            : "B: Back   Up/Down: navigate   L/R: switch tab";
+        renderText(renderer, hint, CX, H-22, {70,70,95,255}, m_fontTiny);
+    }
 }
 
 void MainLayout::renderOnboarding(SDL_Renderer* renderer) {
