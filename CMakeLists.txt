@@ -37,6 +37,12 @@ target_link_libraries(wiiu_mod_store PRIVATE
     SDL2
     SDL2_ttf
     SDL2_image
+    SDL2_mixer
+    vorbisfile
+    vorbis
+    ogg
+    mpg123
+    modplug
     freetype
     png
     z
@@ -58,7 +64,7 @@ wut_create_wuhb(wiiu_mod_store
     NAME "CupStore"
     AUTHOR "timkicker"
     ICON  ${CMAKE_SOURCE_DIR}/meta/icon.png
-    CONTENT ${CMAKE_SOURCE_DIR}/meta/fonts
+    CONTENT ${CMAKE_SOURCE_DIR}/meta/content
 )
 
 if(BUILD_MODE STREQUAL "hw")

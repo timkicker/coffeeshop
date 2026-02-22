@@ -2,7 +2,7 @@
 #include "app/App.h"
 #include "net/DownloadQueue.h"
 
-static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
+static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 
 RegionSelectScreen::RegionSelectScreen(App* app, const Mod& mod,
                                        const std::vector<TitleEntry>& entries)

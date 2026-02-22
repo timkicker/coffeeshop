@@ -9,7 +9,7 @@
 #include <cstdio>
 #include <algorithm>
 
-static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
+static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 
 DetailScreen::DetailScreen(App* app, const Mod& mod, const std::string& gameName,
                            const std::vector<std::string>& titleIds)

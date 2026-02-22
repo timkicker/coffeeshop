@@ -4,7 +4,7 @@
 #include "util/ScreenLog.h"
 #include "util/Logger.h"
 
-static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
+static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 
 DownloadScreen::DownloadScreen(App* app, const Mod& mod, const std::string& titleId)
     : Screen(app), m_mod(mod), m_titleId(titleId) {}

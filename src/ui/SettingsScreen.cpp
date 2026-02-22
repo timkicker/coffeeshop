@@ -12,7 +12,7 @@
 #include <dirent.h>
 #include <cstring>
 
-static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
+static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 
 // Get directory size in bytes
 static uint64_t dirSize(const std::string& path) {

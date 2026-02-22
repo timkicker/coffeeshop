@@ -1,7 +1,7 @@
 #include "BrowseScreen.h"
 #include "app/App.h"
 
-static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
+static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 
 BrowseScreen::BrowseScreen(App* app) : Screen(app) {}
 

@@ -5,7 +5,7 @@
 
 #include <SDL2/SDL_ttf.h>
 
-static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
+static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 
 MainMenuScreen::MainMenuScreen(App* app) : Screen(app) {
     m_items = {

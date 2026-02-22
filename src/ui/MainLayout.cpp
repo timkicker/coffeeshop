@@ -12,7 +12,7 @@
 #include <algorithm>
 #include "util/ImageCache.h"
 
-static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
+static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 static constexpr int CARDS_PER_ROW = 3;
 static constexpr int CARD_W        = 280;
 static constexpr int CARD_H        = 160;
