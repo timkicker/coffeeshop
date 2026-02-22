@@ -25,7 +25,11 @@ int main(int argc, char** argv) {
 #endif
 
 #ifdef __WUT__
-    Paths::sdMounted = false; // WHBMountSdCard only on hw
+#if BUILD_HW
+    Paths::sdMounted = WHBMountSdCard();
+#else
+    Paths::sdMounted = false;
+#endif
     if (Paths::sdMounted) {
         LOG_INFO("SD card mounted");
     } else {
