@@ -1,16 +1,16 @@
 #include <whb/proc.h>
 #include <whb/log.h>
-#include <whb/log_udp.h>
-
 #include "app/App.h"
 #include "app/Paths.h"
 #include "util/Logger.h"
 
-// SD card mounting - try WHBMountSdCard if available at runtime
+#if !BUILD_HW
+#include <whb/log_udp.h>
+#endif
+
 #ifdef __WUT__
 #include <sys/iosupport.h>
 extern "C" {
-    // Forward declare - provided by wut at link time
     bool WHBMountSdCard();
     bool WHBUnmountSdCard();
 }
@@ -18,14 +18,18 @@ extern "C" {
 
 int main(int argc, char** argv) {
     WHBProcInit();
+
+#if !BUILD_HW
+    // UDP logging only for Cemu/debug builds
     WHBLogUdpInit();
+#endif
 
 #ifdef __WUT__
-    Paths::sdMounted = false;
+    Paths::sdMounted = false; // WHBMountSdCard only on hw
     if (Paths::sdMounted) {
-        LOG_INFO("SD card mounted at sd:/");
+        LOG_INFO("SD card mounted");
     } else {
-        LOG_WARN("SD card not available, using /vol/content fallback");
+        LOG_WARN("SD card mount failed, using /vol/content fallback");
     }
 #else
     Paths::sdMounted = false;
@@ -40,7 +44,10 @@ int main(int argc, char** argv) {
     if (Paths::sdMounted) WHBUnmountSdCard();
 #endif
 
+#if !BUILD_HW
     WHBLogUdpDeinit();
+#endif
+
     WHBProcShutdown();
     return 0;
 }
