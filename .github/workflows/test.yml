@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          mkdir -p tests/build
+          cd tests/build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build & Run Tests
+        run: |
+          cd tests/build
+          make -j$(nproc)
+          ./cupstore_tests

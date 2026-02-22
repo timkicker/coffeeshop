@@ -1,0 +1,24 @@
+name: Build Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitppc:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (Cemu/Debug)
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/wut/share/wut.toolchain.cmake \
+            -DBUILD_MODE=cemu \
+            -DAPP_VERSION=0.0.0-dev
+          make -j$(nproc)

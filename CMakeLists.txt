@@ -66,4 +66,7 @@ else()
     target_compile_definitions(wiiu_mod_store PRIVATE BUILD_HW=0)
 endif()
 
-target_compile_definitions(wiiu_mod_store PRIVATE APP_VERSION="0.1.0")
+if(NOT DEFINED APP_VERSION)
+    set(APP_VERSION "dev")
+endif()
+target_compile_definitions(wiiu_mod_store PRIVATE APP_VERSION="${APP_VERSION}")
