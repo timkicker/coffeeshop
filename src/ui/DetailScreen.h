@@ -29,7 +29,8 @@ private:
     Mod                      m_mod;
     std::string              m_gameName;
     std::vector<std::string> m_titleIds;
-    int                      m_screenshotIndex = 0;
+    int                      m_screenshotIndex  = 0;
+    bool                     m_confirmUninstall = false;
     InstallStatus            m_installStatus;
 
     TTF_Font* m_fontLarge  = nullptr;

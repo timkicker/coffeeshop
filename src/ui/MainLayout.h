@@ -7,6 +7,7 @@
 #include "mods/ConflictChecker.h"
 #include <SDL2/SDL_ttf.h>
 #include <string>
+#include <map>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -57,6 +58,7 @@ private:
     enum class FetchState { Idle, Loading, Done, Error };
     std::atomic<FetchState> m_fetchState { FetchState::Idle };
     std::string             m_fetchError;
+    std::map<std::string, std::string> m_repoStatus; // url -> "OK" or error msg
     std::thread             m_fetchThread;
     std::mutex              m_repoMutex;
     Repo                    m_repo;
@@ -73,6 +75,9 @@ private:
     bool                      m_confirmUninstall  = false;
     bool                      m_showConflict      = false;
     ConflictResult            m_conflictResult;
+    bool                      m_showStartupConflicts = false;
+    struct StartupConflict { std::string modName; std::vector<std::string> conflicts; };
+    std::vector<StartupConflict> m_startupConflicts;
 
     // Settings state
     int                       m_settingsSelected  = 0;

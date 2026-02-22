@@ -14,10 +14,18 @@ struct Mod {
     std::string thumbnail; // URL
     std::vector<std::string> includes;
     std::vector<std::string> screenshots;
+    // Optional metadata
+    std::string              releaseDate;   // e.g. "2024-03-15"
+    std::string              changelog;     // free text
+    std::string              license;       // e.g. "CC BY-NC"
+    std::vector<std::string> requirements;  // e.g. ["60fps patch"]
+    std::vector<std::string> tags;          // e.g. ["course", "skin"]
+    uint64_t                 fileSize = 0;  // bytes, 0 = unknown
 };
 
 struct Game {
     std::string name;
+    std::string icon;  // optional URL
     std::vector<std::string> titleIds;
     std::vector<Mod> mods;
 };

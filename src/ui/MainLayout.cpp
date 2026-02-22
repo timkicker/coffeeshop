@@ -43,6 +43,10 @@ void MainLayout::onEnter() {
             for (auto& url : m_config.repos) {
                 RepoManager rm;
                 rm.fetch(url);
+                {
+                    std::lock_guard<std::mutex> sl(m_repoMutex);
+                    m_repoStatus[url] = rm.lastError().empty() ? "OK" : rm.lastError();
+                }
                 if (!rm.lastError().empty()) {
                     lastError = url + ": " + rm.lastError();
                     LOG_WARN("MainLayout: repo failed: %s", lastError.c_str());
@@ -60,6 +64,18 @@ void MainLayout::onEnter() {
                 m_fetchState = FetchState::Error;
             } else {
                 m_fetchState = FetchState::Done;
+                // Auto-conflict check: scan installed and warn if any conflicts exist
+                auto installed = InstalledScanner::scan();
+                std::vector<InstalledMod> active;
+                for (auto& m : installed) if (m.active) active.push_back(m);
+                m_startupConflicts.clear();
+                for (auto& m : active) {
+                    auto res = ConflictChecker::check(m, active);
+                    if (res.hasConflict) {
+                        m_startupConflicts.push_back({m.name, res.conflictingMods});
+                    }
+                }
+                if (!m_startupConflicts.empty()) m_showStartupConflicts = true;
             }
         });
     }
@@ -132,9 +148,6 @@ void MainLayout::handleBrowseInput(const Input& input) {
         m_app->pushScreen(std::make_unique<DetailScreen>(
             m_app, game.mods[m_selectedMod], game.name, game.titleIds));
     }
-
-    if (input.zr) { m_sortMode = (SortMode)(((int)m_sortMode + 1) % 3); m_selectedMod = 0; }
-    if (input.zl) { m_sortMode = (SortMode)(((int)m_sortMode + 2) % 3); m_selectedMod = 0; }
 }
 
 void MainLayout::handleInstalledInput(const Input& input) {
@@ -222,6 +235,34 @@ void MainLayout::update() {
 }
 
 void MainLayout::render(SDL_Renderer* renderer) {
+    if (m_showStartupConflicts && !m_startupConflicts.empty()) {
+        const int W = m_app->screenWidth();
+        const int H = m_app->screenHeight();
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
+        SDL_Rect fb = {0,0,W,H}; SDL_RenderFillRect(renderer, &fb);
+        SDL_SetRenderDrawColor(renderer, 60, 40, 10, 255);
+        SDL_Rect card = {W/2-280, H/2-120, 560, 240};
+        SDL_RenderFillRect(renderer, &card);
+        SDL_SetRenderDrawColor(renderer, 200, 140, 30, 255);
+        SDL_RenderDrawRect(renderer, &card);
+        if (m_fontSmall) {
+            renderText(renderer, "Conflict Warning", W/2-240, H/2-104, {220,180,50,255}, m_fontSmall);
+            renderText(renderer, "Active mods with file conflicts detected:", W/2-240, H/2-78, {200,200,220,255}, m_fontTiny ? m_fontTiny : m_fontSmall);
+            int ry = H/2-58;
+            for (auto& sc : m_startupConflicts) {
+                std::string line = sc.modName + " conflicts with: ";
+                for (size_t i = 0; i < sc.conflicts.size(); i++) {
+                    if (i) line += ", ";
+                    line += sc.conflicts[i];
+                }
+                if (m_fontTiny) renderText(renderer, line, W/2-240, ry, {200,160,100,255}, m_fontTiny);
+                ry += 18;
+                if (ry > H/2+80) break;
+            }
+            renderText(renderer, "A / B: Dismiss", W/2-240, H/2+90, {120,120,150,255}, m_fontTiny ? m_fontTiny : m_fontSmall);
+        }
+        return;
+    }
     if (m_showOnboarding) { renderOnboarding(renderer); return; }
     renderSidebar(renderer);
     switch (m_activeTab) {
@@ -311,20 +352,76 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         return;
     }
 
-    // Game filter pills
-    int gx = cx + 10;
+    // Game filter pills - installed games first, with primary color
+    // Build sorted game indices: installed first, then rest
+    std::vector<int> gameOrder;
+    std::vector<int> installedGameIndices;
+    std::vector<int> otherGameIndices;
     for (int i = 0; i < (int)games.size(); i++) {
+        bool hasInstalled = false;
+        for (auto& inst : m_installedMods) {
+            for (auto& tid : games[i].titleIds) {
+                if (inst.titleId == tid) { hasInstalled = true; break; }
+            }
+            if (hasInstalled) break;
+        }
+        if (hasInstalled) installedGameIndices.push_back(i);
+        else              otherGameIndices.push_back(i);
+    }
+    for (int i : installedGameIndices) gameOrder.push_back(i);
+    for (int i : otherGameIndices)     gameOrder.push_back(i);
+
+    int gx = cx + 10;
+    for (int oi = 0; oi < (int)gameOrder.size(); oi++) {
+        int i = gameOrder[oi];
         bool sel = (i == m_selectedGame);
+        bool hasInstalled = std::find(installedGameIndices.begin(),
+                                      installedGameIndices.end(), i) != installedGameIndices.end();
+
+        // Icon
+        int iconW = 0;
+        SDL_Texture* iconTex = nullptr;
+        if (!games[i].icon.empty()) {
+            ImageCache::get().request(games[i].icon);
+            iconTex = ImageCache::get().texture(games[i].icon, renderer);
+            if (iconTex) iconW = 24;
+        }
+
         int tw = 0;
         if (m_fontSmall) TTF_SizeText(m_fontSmall, games[i].name.c_str(), &tw, nullptr);
-        SDL_Color bgc = sel ? SDL_Color{50,120,220,255} : SDL_Color{30,30,50,255};
-        SDL_Rect pill = {gx, 12, tw+20, 28};
+        int pillW = tw + 20 + iconW;
+
+        // Colors: installed=blue-primary, other=dark-secondary
+        SDL_Color bgc = sel
+            ? SDL_Color{60, 140, 255, 255}
+            : hasInstalled
+                ? SDL_Color{30, 70, 140, 255}
+                : SDL_Color{28, 28, 45, 255};
+        SDL_Color borderC = sel
+            ? SDL_Color{100, 180, 255, 255}
+            : hasInstalled
+                ? SDL_Color{50, 100, 180, 255}
+                : SDL_Color{45, 45, 70, 255};
+
+        SDL_Rect pill = {gx, 8, pillW, 30};
         SDL_SetRenderDrawColor(renderer, bgc.r, bgc.g, bgc.b, 255);
         SDL_RenderFillRect(renderer, &pill);
+        SDL_SetRenderDrawColor(renderer, borderC.r, borderC.g, borderC.b, 255);
+        SDL_RenderDrawRect(renderer, &pill);
+
+        // Icon rendering
+        int textX = gx + 10;
+        if (iconTex) {
+            SDL_Rect iconRect = {gx + 5, 11, 22, 22};
+            SDL_RenderCopy(renderer, iconTex, nullptr, &iconRect);
+            textX = gx + 32;
+        }
+
         if (m_fontSmall)
-            renderText(renderer, games[i].name, gx+10, 16,
-                       sel ? SDL_Color{255,255,255,255} : SDL_Color{160,160,190,255}, m_fontSmall);
-        gx += tw + 30;
+            renderText(renderer, games[i].name, textX, 14,
+                       sel ? SDL_Color{255,255,255,255} : SDL_Color{180,180,210,255}, m_fontSmall);
+
+        gx += pillW + 8;
     }
 
     // Cards - sorted copy
@@ -403,7 +500,7 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         const char* sortLabel = m_sortMode == SortMode::NameAZ ? "Sort: Name A-Z"
                               : m_sortMode == SortMode::Version ? "Sort: Version"
                               : "Sort: Default";
-        renderText(renderer, "D-Pad: navigate   A: details   Y: downloads   ZL/ZR: sort",
+        renderText(renderer, "D-Pad: navigate   A: details   L/R: game   ZL/ZR: sort   Y: downloads",
                    cx+10, H-22, {70,70,95,255}, m_fontTiny);
         renderText(renderer, sortLabel, W-160, H-22, {100,160,100,255}, m_fontTiny);
     }
@@ -544,14 +641,21 @@ struct SItem {
     std::string value;
 };
 
-static std::vector<SItem> buildSettingsItems(const Config& cfg) {
+static std::vector<SItem> buildSettingsItems(const Config& cfg,
+    const std::map<std::string, std::string>& repoStatus) {
     std::vector<SItem> items;
     auto header = [&](const char* t)                          { items.push_back({SItemType::Header, t, ""}); };
     auto info   = [&](const char* l, const std::string& v)   { items.push_back({SItemType::Info,   l, v});  };
     auto button = [&](const char* l)                          { items.push_back({SItemType::Button, l, ""}); };
 
     header("Repos");
-    for (auto& url : cfg.repos) info(url.c_str(), "");
+    for (auto& url : cfg.repos) {
+        auto it = repoStatus.find(url);
+        std::string status = it != repoStatus.end() ? it->second : "Pending...";
+        // Truncate long URLs for display
+        std::string shortUrl = url.size() > 50 ? url.substr(0, 47) + "..." : url;
+        info(shortUrl.c_str(), status);
+    }
     info("Config file", Paths::configFile());
 
     header("System");
@@ -628,7 +732,7 @@ void MainLayout::handleSettingsInput(const Input& input) {
         return;
     }
 
-    auto items = buildSettingsItems(m_config);
+    auto items = buildSettingsItems(m_config, m_repoStatus);
 
     auto selectable = [&](int i) {
         return i >= 0 && i < (int)items.size() && items[i].type != SItemType::Header;
@@ -717,7 +821,7 @@ void MainLayout::renderSettings(SDL_Renderer* renderer) {
         return;
     }
 
-    auto items = buildSettingsItems(m_config);
+    auto items = buildSettingsItems(m_config, m_repoStatus);
 
     const int ITEM_H = 32;
     int y = 8;

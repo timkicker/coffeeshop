@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include "InstalledScanner.h"
 #include "app/Paths.h"
 #include "util/Logger.h"

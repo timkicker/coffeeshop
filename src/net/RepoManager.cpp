@@ -138,6 +138,7 @@ void RepoManager::parseGame(const std::string& json) {
 
         Game game;
         game.name = jg["name"].get<std::string>();
+        game.icon = jg.value("icon", "");
         auto tids = jg.contains("titleIds") ? jg["titleIds"] : jg["title_ids"];
         for (auto& tid : tids) game.titleIds.push_back(tid.get<std::string>());
 
@@ -149,22 +150,30 @@ void RepoManager::parseGame(const std::string& json) {
             }
             Mod mod;
             mod.id          = jm["id"].get<std::string>();
-            // Validate id: only a-z, 0-9, dash, underscore
-            bool validId = !mod.id.empty() && std::all_of(mod.id.begin(), mod.id.end(),
-                [](char c){ return isalnum(c) || c == '-' || c == '_'; });
-            if (!validId) { LOG_WARN("RepoManager: skipping mod with invalid id: %s", mod.id.c_str()); continue; }
+                // Validate id: only a-z, 0-9, dash, underscore
+                bool validId = !mod.id.empty() && std::all_of(mod.id.begin(), mod.id.end(),
+                    [](char c){ return isalnum(c) || c == '-' || c == '_'; });
+                if (!validId) { LOG_WARN("RepoManager: skipping mod with invalid id: %s", mod.id.c_str()); continue; }
             mod.name        = jm["name"].get<std::string>();
             mod.version     = jm["version"].get<std::string>();
             mod.download    = jm["download"].get<std::string>();
             mod.author      = jm.value("author", "Unknown");
             mod.description = jm.value("description", "");
             mod.type        = jm.value("type", "mod");
-            mod.thumbnail   = jm.value("thumbnail", "");
+                mod.thumbnail   = jm.value("thumbnail", "");
 
             if (jm.contains("includes") && jm["includes"].is_array())
                 for (auto& s : jm["includes"]) mod.includes.push_back(s.get<std::string>());
             if (jm.contains("screenshots") && jm["screenshots"].is_array())
                 for (auto& s : jm["screenshots"]) mod.screenshots.push_back(s.get<std::string>());
+            mod.releaseDate  = jm.value("releaseDate", "");
+            mod.changelog    = jm.value("changelog", "");
+            mod.license      = jm.value("license", "");
+            mod.fileSize     = jm.value("fileSize", uint64_t(0));
+            if (jm.contains("requirements") && jm["requirements"].is_array())
+                for (auto& s : jm["requirements"]) mod.requirements.push_back(s.get<std::string>());
+            if (jm.contains("tags") && jm["tags"].is_array())
+                for (auto& s : jm["tags"]) mod.tags.push_back(s.get<std::string>());
 
             if (!RepoManager::validateUrl(mod.download)) {
                 LOG_WARN("RepoManager: skipping mod '%s' - invalid download URL", mod.id.c_str());
