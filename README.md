@@ -1,6 +1,7 @@
 <p align="center">
-  <img alt="CupStore" src="meta/branding/cupstore_banner_with_logo_large.png" width="480">
+  <img alt="CupStore" src="meta/branding/cupstore_banner_with_logo_xlarge_fixed.png" width="480">
 </p>
+
 
 <p align="center">
   <b>A mod manager for the Wii U. Browse, install and manage SDCafiine mods.</b>
@@ -31,7 +32,6 @@
   <img src="meta/branding/screenshots/installed.png" alt="Installed mods" width="70%"/>
 </p>
 
----
 
 ## Features
 
@@ -43,7 +43,7 @@
 - Update badges when newer versions are available
 - Settings tab with repo management, cache control, and log viewer
 
----
+
 
 ## Installation
 
@@ -69,7 +69,7 @@
 
 > **Note:** CupStore does not come with a built-in mod repository. You need to provide your own repo URL. See [Hosting your own repo](#hosting-your-own-repo) below.
 
----
+
 
 ## Hosting your own repo
 
@@ -81,7 +81,7 @@ CupStore loads mods from community-hosted repositories. To host your own:
 
 The template includes a validation script and GitHub Action that checks your repo on every PR.
 
----
+
 
 ## config.json Reference
 
@@ -100,7 +100,7 @@ The template includes a validation script and GitHub Action that checks your rep
 
 Multiple repos are supported and merged at runtime.
 
----
+
 
 ## Contributing
 
@@ -114,18 +114,18 @@ cd tests && mkdir -p build && cd build
 cmake .. && make && ./cupstore_tests
 ```
 
----
+
 
 ## License & Credits
 
 Licensed under [GPLv3](LICENSE).
 
 **Libraries**
-- [devkitPro / WUT](https://devkitpro.org/) — Wii U toolchain and runtime
-- [SDL2](https://libsdl.org/) — rendering, input
-- [SDL2_ttf](https://github.com/libsdl-org/SDL_ttf) — font rendering
-- [SDL2_image](https://github.com/libsdl-org/SDL_image) — image loading
-- [libcurl](https://curl.se/libcurl/) — HTTP downloads
-- [nlohmann/json](https://github.com/nlohmann/json) — JSON parsing
-- [mbedTLS](https://github.com/Mbed-TLS/mbedtls) — TLS for HTTPS
-- [Catch2](https://github.com/catchorg/Catch2) — unit testing
+- [devkitPro / WUT](https://devkitpro.org/): Wii U toolchain and runtime
+- [SDL2](https://libsdl.org/): rendering, input
+- [SDL2_ttf](https://github.com/libsdl-org/SDL_ttf): font rendering
+- [SDL2_image](https://github.com/libsdl-org/SDL_image): image loading
+- [libcurl](https://curl.se/libcurl/): HTTP downloads
+- [nlohmann/json](https://github.com/nlohmann/json): JSON parsing
+- [mbedTLS](https://github.com/Mbed-TLS/mbedtls): TLS for HTTPS
+- [Catch2](https://github.com/catchorg/Catch2): unit testing
