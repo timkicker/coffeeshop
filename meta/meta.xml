@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-    <name>Mod Store</name>
+    <name>CupStore</name>
     <coder>Tim</coder>
     <version>0.1.0</version>
-    <release_date>20250221</release_date>
-    <short_description>Wii U Mod Browser &amp; Manager</short_description>
-    <long_description>Browse, download and manage Wii U game mods via community repositories. Requires Aroma + SDCafiine.</long_description>
+    <release_date>20260222</release_date>
+    <short_description>Wii U Mod Manager and Store for SDCafiine</short_description>
+<long_description>Browse, download and manage Wii U game mods via community repositories. Requires Aroma and SDCafiine.</long_description>
 </app>

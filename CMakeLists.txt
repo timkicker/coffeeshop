@@ -54,8 +54,8 @@ target_link_libraries(wiiu_mod_store PRIVATE
 )
 wut_create_rpx(wiiu_mod_store)
 wut_create_wuhb(wiiu_mod_store
-    NAME "Mod Store"
-    AUTHOR "Tim"
+    NAME "CupStore"
+    AUTHOR "timkicker"
     ICON  ${CMAKE_SOURCE_DIR}/meta/icon.png
     CONTENT ${CMAKE_SOURCE_DIR}/meta/fonts
 )

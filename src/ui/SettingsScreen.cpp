@@ -228,7 +228,7 @@ void SettingsScreen::render(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 40, 40, 60, 255);
     SDL_RenderDrawLine(renderer, SIDEBAR_W, 0, SIDEBAR_W, H);
 
-    if (m_fontNormal) renderText(renderer, "Mod Store", 12, 14, {255,255,255,255}, m_fontNormal);
+    if (m_fontNormal) renderText(renderer, "CupStore", 12, 14, {255,255,255,255}, m_fontNormal);
     SDL_SetRenderDrawColor(renderer, 40, 40, 60, 255);
     SDL_RenderDrawLine(renderer, 8, 42, SIDEBAR_W-8, 42);
 
