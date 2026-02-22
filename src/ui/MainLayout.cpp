@@ -163,9 +163,37 @@ void MainLayout::handleInstalledInput(const Input& input) {
     if (input.down) m_selectedInstalled = std::min((int)m_installedMods.size()-1, m_selectedInstalled + 1);
 
     if (input.a) {
+        // Open detail screen - try to find matching mod in repo
+        auto& inst = m_installedMods[m_selectedInstalled];
+        std::lock_guard<std::mutex> lock(m_repoMutex);
+        bool found = false;
+        for (auto& game : m_repo.games) {
+            for (auto& mod : game.mods) {
+                if (mod.id == inst.id) {
+                    m_app->pushScreen(std::make_unique<DetailScreen>(
+                        m_app, mod, game.name, game.titleIds));
+                    found = true;
+                    break;
+                }
+            }
+            if (found) break;
+        }
+        if (!found) {
+            // Fallback: build minimal Mod from InstalledMod
+            Mod fallback;
+            fallback.id      = inst.id;
+            fallback.name    = inst.name.empty() ? inst.id : inst.name;
+            fallback.version = inst.version;
+            fallback.author  = "Unknown";
+            fallback.description = "This mod was not found in any configured repository.";
+            m_app->pushScreen(std::make_unique<DetailScreen>(
+                m_app, fallback, "Unknown Game", std::vector<std::string>{inst.titleId}));
+        }
+    }
+    if (input.x) {
+        // Toggle active/inactive
         auto& mod = m_installedMods[m_selectedInstalled];
         if (!mod.active) {
-            // Activating - check for conflicts first
             auto conflict = ConflictChecker::check(mod, m_installedMods);
             if (conflict.hasConflict) {
                 m_conflictResult = conflict;
@@ -175,16 +203,12 @@ void MainLayout::handleInstalledInput(const Input& input) {
                 m_installedDirty = true;
             }
         } else {
-            // Deactivating - no conflict check needed
             InstalledScanner::setActive(mod, false);
             m_installedDirty = true;
         }
     }
     if (input.y) {
         m_confirmUninstall = true;
-    }
-    if (input.x) {
-        m_installedDirty = true;
     }
 }
 
@@ -427,7 +451,7 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
     // Bottom hints
     if (m_fontTiny) {
         SDL_Color grey = {70, 70, 95, 255};
-        renderText(renderer, "A: toggle   Y: uninstall   X: refresh", cx, H-22, grey, m_fontTiny);
+        renderText(renderer, "A: details   X: toggle   Y: uninstall", cx, H-22, grey, m_fontTiny);
     }
 
     // Conflict warning overlay
