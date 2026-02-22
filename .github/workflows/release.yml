@@ -50,7 +50,7 @@ jobs:
             ```json
             {
               "repos": [
-                "https://raw.githubusercontent.com/timkicker/modmanager-repo-template/main/repo.json"
+                "https://raw.githubusercontent.com/timkicker/cupstore-repo-template/main/repo.json"
               ]
             }
             ```

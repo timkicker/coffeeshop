@@ -717,7 +717,7 @@ static std::vector<SItem> buildSettingsItems(const Config& cfg,
     info("Build", "Cemu / Debug");
 #endif
     info("Author", "Tim Kicker");
-    info("GitHub", "github.com/timkicker/wiiu-mod-store");
+    info("GitHub", "github.com/timkicker/cupstore");
 
     return items;
 }
