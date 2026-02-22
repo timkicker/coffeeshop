@@ -9,6 +9,7 @@
 #include <sys/statvfs.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <algorithm>
 #include "util/ImageCache.h"
 
 static constexpr const char* FONT_PATH = "/vol/content/Roboto-Regular.ttf";
@@ -131,6 +132,9 @@ void MainLayout::handleBrowseInput(const Input& input) {
         m_app->pushScreen(std::make_unique<DetailScreen>(
             m_app, game.mods[m_selectedMod], game.name, game.titleIds));
     }
+
+    if (input.zr) { m_sortMode = (SortMode)(((int)m_sortMode + 1) % 3); m_selectedMod = 0; }
+    if (input.zl) { m_sortMode = (SortMode)(((int)m_sortMode + 2) % 3); m_selectedMod = 0; }
 }
 
 void MainLayout::handleInstalledInput(const Input& input) {
@@ -323,8 +327,20 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         gx += tw + 30;
     }
 
-    // Cards
-    auto& mods = games[m_selectedGame].mods;
+    // Cards - sorted copy
+    std::vector<Mod> sortedMods = games[m_selectedGame].mods;
+    switch (m_sortMode) {
+        case SortMode::NameAZ:
+            std::sort(sortedMods.begin(), sortedMods.end(),
+                [](const Mod& a, const Mod& b){ return a.name < b.name; });
+            break;
+        case SortMode::Version:
+            std::sort(sortedMods.begin(), sortedMods.end(),
+                [](const Mod& a, const Mod& b){ return a.version > b.version; });
+            break;
+        default: break;
+    }
+    auto& mods = sortedMods;
     for (int i = 0; i < (int)mods.size(); i++) {
         auto& mod = mods[i];
         bool  sel = (i == m_selectedMod);
@@ -383,9 +399,14 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         if (m_fontTiny)  renderText(renderer, mod.author+" v"+mod.version, x+8, y+124, {110,110,140,255}, m_fontTiny);
     }
 
-    if (m_fontTiny)
-        renderText(renderer, "D-Pad: navigate   A: details   Y: downloads",
+    if (m_fontTiny) {
+        const char* sortLabel = m_sortMode == SortMode::NameAZ ? "Sort: Name A-Z"
+                              : m_sortMode == SortMode::Version ? "Sort: Version"
+                              : "Sort: Default";
+        renderText(renderer, "D-Pad: navigate   A: details   Y: downloads   ZL/ZR: sort",
                    cx+10, H-22, {70,70,95,255}, m_fontTiny);
+        renderText(renderer, sortLabel, W-160, H-22, {100,160,100,255}, m_fontTiny);
+    }
 }
 
 void MainLayout::renderInstalled(SDL_Renderer* renderer) {

@@ -63,6 +63,9 @@ private:
     int m_selectedGame = 0;
     int m_selectedMod  = 0;
 
+    enum class SortMode { Default, NameAZ, Version };
+    SortMode m_sortMode = SortMode::Default;
+
     // Installed state
     std::vector<InstalledMod> m_installedMods;
     int                       m_selectedInstalled = 0;

@@ -12,6 +12,8 @@ struct Input {
     bool r     = false;
     bool y     = false;
     bool x     = false;
+    bool zl    = false;
+    bool zr    = false;
     bool plus  = false;
     bool minus = false;
 
@@ -31,6 +33,8 @@ struct Input {
             in.r     = btn & VPAD_BUTTON_R;
             in.y     = btn & VPAD_BUTTON_Y;
             in.x     = btn & VPAD_BUTTON_X;
+            in.zl    = btn & VPAD_BUTTON_ZL;
+            in.zr    = btn & VPAD_BUTTON_ZR;
             in.plus  = btn & VPAD_BUTTON_PLUS;
             in.minus = btn & VPAD_BUTTON_MINUS;
         }
