@@ -50,6 +50,7 @@ target_link_libraries(wiiu_mod_store PRIVATE
     mbedtls
     mbedx509
     mbedcrypto
+    webp
     wut
 )
 wut_create_rpx(wiiu_mod_store)
