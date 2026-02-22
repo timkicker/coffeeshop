@@ -4,6 +4,7 @@
 #include "mods/InstallChecker.h"
 #include "mods/InstalledScanner.h"
 #include "net/DownloadQueue.h"
+#include "audio/AudioManager.h"
 #include "app/App.h"
 #include "util/ImageCache.h"
 #include <cstdio>
@@ -63,6 +64,7 @@ void DetailScreen::handleInput(const Input& input) {
         if (m_installStatus.installed && !m_installStatus.updateAvail) return;
         auto entries = InstallHelper::detectInstalled(m_titleIds);
         if (entries.size() == 1) {
+            AudioManager::get().playSound(SoundId::DownloadStart);
             DownloadQueue::get().enqueue(m_mod, entries[0].id);
             m_app->popScreen();
         } else {

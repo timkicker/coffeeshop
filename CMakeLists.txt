@@ -34,15 +34,15 @@ target_link_directories(wiiu_mod_store PRIVATE
     ${DEVKITPRO}/portlibs/wiiu/lib
 )
 target_link_libraries(wiiu_mod_store PRIVATE
-    SDL2
-    SDL2_ttf
-    SDL2_image
     SDL2_mixer
     vorbisfile
     vorbis
     ogg
     mpg123
     modplug
+    SDL2
+    SDL2_ttf
+    SDL2_image
     freetype
     png
     z

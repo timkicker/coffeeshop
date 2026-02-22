@@ -11,6 +11,7 @@
 #include <dirent.h>
 #include <algorithm>
 #include "util/ImageCache.h"
+#include "audio/AudioManager.h"
 
 static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 static constexpr int CARDS_PER_ROW = 3;
@@ -105,6 +106,10 @@ void MainLayout::refreshInstalled() {
 }
 
 void MainLayout::handleInput(const Input& input) {
+    if (m_showStartupConflicts) {
+        if (input.a || input.b) m_showStartupConflicts = false;
+        return;
+    }
     if (m_showOnboarding) {
         if (input.a) { m_config.load(); m_showOnboarding = !m_config.hasRepos(); }
         return;
@@ -118,10 +123,12 @@ void MainLayout::handleInput(const Input& input) {
     if (input.l) {
         if      (m_activeTab == Tab::Installed) m_activeTab = Tab::Browse;
         else if (m_activeTab == Tab::Settings)  m_activeTab = Tab::Installed;
+        AudioManager::get().playSound(SoundId::Navigate);
     }
     if (input.r) {
         if      (m_activeTab == Tab::Browse)    m_activeTab = Tab::Installed;
         else if (m_activeTab == Tab::Installed) m_activeTab = Tab::Settings;
+        AudioManager::get().playSound(SoundId::Navigate);
     }
 
     if (m_activeTab == Tab::Browse)    handleBrowseInput(input);
@@ -138,12 +145,13 @@ void MainLayout::handleBrowseInput(const Input& input) {
     int   modCount = (int)mods.size();
     int   cols     = CARDS_PER_ROW;
 
-    if (input.right && (m_selectedMod % cols) < cols - 1 && m_selectedMod + 1 < modCount) m_selectedMod++;
-    if (input.left  && (m_selectedMod % cols) > 0)                                          m_selectedMod--;
-    if (input.down) { int n = m_selectedMod + cols; if (n < modCount) m_selectedMod = n; }
-    if (input.up)   { int p = m_selectedMod - cols; if (p >= 0)       m_selectedMod = p; }
+    if (input.right && (m_selectedMod % cols) < cols - 1 && m_selectedMod + 1 < modCount) { m_selectedMod++; AudioManager::get().playSound(SoundId::Navigate); }
+    if (input.left  && (m_selectedMod % cols) > 0) { m_selectedMod--; AudioManager::get().playSound(SoundId::Navigate); }
+    if (input.down) { int n = m_selectedMod + cols; if (n < modCount) { m_selectedMod = n; AudioManager::get().playSound(SoundId::Navigate); } }
+    if (input.up)   { int p = m_selectedMod - cols; if (p >= 0)       { m_selectedMod = p; AudioManager::get().playSound(SoundId::Navigate); } }
 
     if (input.a && !mods.empty()) {
+        AudioManager::get().playSound(SoundId::Navigate);
         const auto& game = games[m_selectedGame];
         m_app->pushScreen(std::make_unique<DetailScreen>(
             m_app, game.mods[m_selectedMod], game.name, game.titleIds));
@@ -158,6 +166,7 @@ void MainLayout::handleInstalledInput(const Input& input) {
         if (input.a) {
             // Proceed anyway
             InstalledScanner::setActive(m_installedMods[m_selectedInstalled], true);
+            AudioManager::get().playSound(SoundId::ModActivated);
             m_installedDirty = true;
             m_showConflict   = false;
         }
@@ -176,8 +185,8 @@ void MainLayout::handleInstalledInput(const Input& input) {
         return;
     }
 
-    if (input.up)   m_selectedInstalled = std::max(0, m_selectedInstalled - 1);
-    if (input.down) m_selectedInstalled = std::min((int)m_installedMods.size()-1, m_selectedInstalled + 1);
+    if (input.up)   { int prev = m_selectedInstalled; m_selectedInstalled = std::max(0, m_selectedInstalled - 1); if (m_selectedInstalled != prev) AudioManager::get().playSound(SoundId::Navigate); }
+    if (input.down) { int prev = m_selectedInstalled; m_selectedInstalled = std::min((int)m_installedMods.size()-1, m_selectedInstalled + 1); if (m_selectedInstalled != prev) AudioManager::get().playSound(SoundId::Navigate); }
 
     if (input.a) {
         // Open detail screen - try to find matching mod in repo
@@ -214,13 +223,15 @@ void MainLayout::handleInstalledInput(const Input& input) {
             auto conflict = ConflictChecker::check(mod, m_installedMods);
             if (conflict.hasConflict) {
                 m_conflictResult = conflict;
-                m_showConflict   = true;
+                m_showConflict   = true; AudioManager::get().playSound(SoundId::ConflictWarning);
             } else {
                 InstalledScanner::setActive(mod, true);
+                AudioManager::get().playSound(SoundId::ModActivated);
                 m_installedDirty = true;
             }
         } else {
             InstalledScanner::setActive(mod, false);
+            AudioManager::get().playSound(SoundId::ModDeactivated);
             m_installedDirty = true;
         }
     }
@@ -230,6 +241,30 @@ void MainLayout::handleInstalledInput(const Input& input) {
 }
 
 void MainLayout::update() {
+    // Audio startup logic - runs once when fetch completes
+    if (!m_audioStarted) {
+        if (m_fetchState == FetchState::Done) {
+            m_audioStarted = true;
+            AudioManager::get().playSound(SoundId::Startup);
+            // Fade in music after a short delay via Mix_FadeInMusic
+            // We use a simple frame counter to delay
+            m_musicFadeDelay = 90; // ~3 seconds at 30fps
+        } else if (m_fetchState == FetchState::Error) {
+            m_audioStarted = true;
+            AudioManager::get().playSound(SoundId::Error);
+        }
+    }
+    if (m_fadeInAlpha > 0) m_fadeInAlpha = std::max(0, m_fadeInAlpha - 4); // ~64 frames
+    if (m_musicFadeDelay > 0) {
+        m_musicFadeDelay--;
+        if (m_musicFadeDelay == 0 && m_config.musicTrack != "off") {
+            const char* f = (m_config.musicTrack == "alt")
+                ? "/vol/content/sounds/theme_alt.ogg"
+                : "/vol/content/sounds/theme_main.ogg";
+            auto* music = Mix_LoadMUS(f);
+            if (music) Mix_FadeInMusic(music, -1, 3000);
+        }
+    }
     if (m_installedDirty)
         refreshInstalled();
 }

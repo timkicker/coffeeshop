@@ -76,6 +76,9 @@ private:
     bool                      m_showConflict      = false;
     ConflictResult            m_conflictResult;
     bool                      m_showStartupConflicts = false;
+    bool                      m_audioStarted     = false;
+    int                       m_musicFadeDelay   = 0;
+    int                       m_fadeInAlpha      = 255; // 255=black, counts to 0
     struct StartupConflict { std::string modName; std::vector<std::string> conflicts; };
     std::vector<StartupConflict> m_startupConflicts;
 

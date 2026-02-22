@@ -21,6 +21,7 @@ bool Config::load() {
         if (j.contains("repos") && j["repos"].is_array())
             for (auto& r : j["repos"])
                 if (r.is_string()) repos.push_back(r.get<std::string>());
+        musicTrack = j.value("musicTrack", "off");
         LOG_INFO("Config loaded, %zu repo(s)", repos.size());
         return true;
     } catch (const std::exception& e) {
@@ -35,6 +36,7 @@ bool Config::save() {
 
     nlohmann::json j;
     j["repos"] = repos;
+    j["musicTrack"] = musicTrack;
 
     std::ofstream f(configPath());
     if (!f.is_open()) {

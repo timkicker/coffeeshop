@@ -5,6 +5,7 @@
 
 struct Config {
     std::vector<std::string> repos;
+    std::string musicTrack = "off";
 
     bool hasRepos() const { return !repos.empty(); }
     bool load();

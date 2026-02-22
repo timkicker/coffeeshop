@@ -31,7 +31,7 @@ public:
 private:
     AudioManager() = default;
     bool m_initialized  = false;
-    bool m_musicEnabled = true;
+    bool m_musicEnabled = false;
     bool m_soundEnabled = true;
     MusicTrack m_currentTrack = MusicTrack::Main;
     std::unordered_map<int, Mix_Chunk*> m_sounds;
