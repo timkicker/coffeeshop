@@ -1,7 +1,9 @@
 #pragma once
 
 #include <string>
+#include <optional>
 #include <vector>
+#include <cstdint>
 
 struct Mod {
     std::string id;
@@ -48,6 +50,10 @@ public:
 
     const Repo&        repo()      const { return m_repo; }
     const std::string& lastError() const { return m_lastError; }
+
+    // Testable: parse a single game JSON object into a Game struct
+    // Returns empty optional if required fields are missing or all mods are invalid
+    static std::optional<Game> parseGameFromJson(const std::string& json);
 
 private:
     void parseGame(const std::string& json);

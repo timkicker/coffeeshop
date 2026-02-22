@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/timkicker/cupstore/actions">
-    <img alt="Build" src="https://img.shields.io/github/actions/workflow/status/timkicker/cupstore/release.yml?label=build">
+    <img alt="Build" src="https://img.shields.io/github/actions/workflow/status/timkicker/cupstore/release.yml?label=build&branch=main">
   </a>
   <a href="https://github.com/timkicker/cupstore/releases/latest">
     <img alt="Release" src="https://img.shields.io/github/v/release/timkicker/cupstore?display_name=tag&sort=semver">

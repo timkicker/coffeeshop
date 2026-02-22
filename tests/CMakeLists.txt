@@ -22,6 +22,8 @@ add_executable(cupstore_tests
     stubs.cpp
 
     ${SRC}/mods/ConflictChecker.cpp
+    ${SRC}/net/RepoManager.cpp
+    ${SRC}/mods/InstallChecker.cpp
     ${SRC}/mods/InstalledScanner.cpp
 )
 
