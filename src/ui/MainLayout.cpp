@@ -121,18 +121,12 @@ void MainLayout::handleInput(const Input& input) {
     }
 
     if (input.l) {
-        if (m_activeTab == Tab::Browse) {
-            auto& games = m_repo.games;
-            if (!games.empty() && m_selectedGame > 0) { m_selectedGame--; m_selectedMod = 0; AudioManager::get().playSound(SoundId::Navigate); }
-        } else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Browse; AudioManager::get().playSound(SoundId::Navigate); }
+        if      (m_activeTab == Tab::Installed) { m_activeTab = Tab::Browse;    AudioManager::get().playSound(SoundId::Navigate); }
         else if (m_activeTab == Tab::Settings)  { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
     }
     if (input.r) {
-        if (m_activeTab == Tab::Browse) {
-            auto& games = m_repo.games;
-            if (!games.empty() && m_selectedGame < (int)games.size() - 1) { m_selectedGame++; m_selectedMod = 0; AudioManager::get().playSound(SoundId::Navigate); }
-        } else if (m_activeTab == Tab::Browse)    { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
-        else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Settings; AudioManager::get().playSound(SoundId::Navigate); }
+        if      (m_activeTab == Tab::Browse)    { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
+        else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Settings;  AudioManager::get().playSound(SoundId::Navigate); }
     }
 
     if (m_activeTab == Tab::Browse)    handleBrowseInput(input);
