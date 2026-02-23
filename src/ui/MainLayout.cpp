@@ -609,36 +609,40 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
 
     // Conflict warning overlay
     if (m_showConflict) {
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 210);
         SDL_Rect overlay = {0, 0, W, H};
         SDL_RenderFillRect(renderer, &overlay);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 
         SDL_SetRenderDrawColor(renderer, 30, 25, 15, 255);
-        SDL_Rect card = {W/2-250, H/2-90, 500, 180};
+        SDL_Rect card = {W/2-280, H/2-120, 560, 240};
         SDL_RenderFillRect(renderer, &card);
         SDL_SetRenderDrawColor(renderer, 200, 140, 30, 255);
         SDL_RenderDrawRect(renderer, &card);
 
         if (m_fontSmall) {
-            renderText(renderer, "Conflict Warning", W/2-210, H/2-78, {255,200,50,255}, m_fontSmall);
-            std::string msg = "This mod conflicts with: ";
-            for (size_t i = 0; i < m_conflictResult.conflictingMods.size(); i++) {
-                if (i > 0) msg += ", ";
-                msg += m_conflictResult.conflictingMods[i];
+            renderText(renderer, "Conflict Warning", W/2-255, H/2-108, {255,200,50,255}, m_fontSmall);
+            // Render conflicting mods, one per line
+            renderText(renderer, "Conflicts with:", W/2-255, H/2-80, {220,200,150,255}, m_fontSmall);
+            int mody = H/2-58;
+            for (size_t i = 0; i < m_conflictResult.conflictingMods.size() && i < 3; i++) {
+                renderText(renderer, "  - " + m_conflictResult.conflictingMods[i], W/2-240, mody, {220,200,150,255}, m_fontSmall);
+                mody += 20;
             }
-            renderText(renderer, msg, W/2-210, H/2-50, {220,200,150,255}, m_fontSmall);
             if (!m_conflictResult.conflictingFiles.empty()) {
-                renderText(renderer, "Conflicting files:", W/2-210, H/2-24, {150,140,110,255}, m_fontSmall);
-                int fy = H/2;
+                renderText(renderer, "Conflicting files:", W/2-255, H/2+10, {150,140,110,255}, m_fontSmall);
+                int fy = H/2+30;
                 for (auto& f : m_conflictResult.conflictingFiles) {
-                    if (m_fontTiny) renderText(renderer, "  " + f, W/2-210, fy, {130,120,100,255}, m_fontTiny);
-                    fy += 16;
+                    if (m_fontTiny) renderText(renderer, "  " + f, W/2-255, fy, {130,120,100,255}, m_fontTiny);
+                    fy += 18;
+                    if (fy > H/2+80) break;
                 }
             }
         }
         if (m_fontNormal) {
-            renderText(renderer, "A: Activate anyway", W/2-210, H/2+70, {200,140,30,255}, m_fontNormal);
-            renderText(renderer, "B: Cancel",          W/2+60,  H/2+70, {130,130,160,255}, m_fontNormal);
+            renderText(renderer, "A: Activate anyway", W/2-255, H/2+50, {200,140,30,255}, m_fontSmall);
+            renderText(renderer, "B: Cancel",          W/2+50,  H/2+50, {130,130,160,255}, m_fontSmall);
         }
     }
 
