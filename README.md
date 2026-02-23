@@ -55,21 +55,10 @@
 
 1. Download `wiiu_mod_store.wuhb` from the [latest release](https://github.com/timkicker/cupstore/releases/latest)
 2. Copy it to `SD:/wiiu/apps/cupstore/wiiu_mod_store.wuhb`
-3. Create `SD:/wiiu/apps/cupstore/config.json` with the repos you want to use:
-
-```json
-{
-  "repos": [
-    "https://raw.githubusercontent.com/your-name/your-repo/main/repo.json"
-  ]
-}
-```
-
+3. Create `SD:/wiiu/apps/cupstore/config.json` with the [repos you want to use](#config.json-reference):
 4. Launch CupStore via the Homebrew Launcher
 
 > **Note:** CupStore does not come with a built-in mod repository. You need to provide your own repo URL. See [Hosting your own repo](#hosting-your-own-repo) below.
-
-
 
 ## Hosting your own repo
 
@@ -85,10 +74,6 @@ The template includes a validation script and GitHub Action that checks your rep
 
 ## config.json Reference
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `repos` | ✅ | List of repo URLs to load mods from |
-
 ```json
 {
   "repos": [
@@ -99,7 +84,6 @@ The template includes a validation script and GitHub Action that checks your rep
 ```
 
 Multiple repos are supported and merged at runtime.
-
 
 
 ## Contributing
