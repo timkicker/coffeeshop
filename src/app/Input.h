@@ -23,10 +23,12 @@ struct Input {
         VPADReadError err;
         if (VPADRead(VPAD_CHAN_0, &status, 1, &err) > 0) {
             uint32_t btn = status.trigger;
-            in.up    = btn & VPAD_BUTTON_UP;
-            in.down  = btn & VPAD_BUTTON_DOWN;
-            in.left  = btn & VPAD_BUTTON_LEFT;
-            in.right = btn & VPAD_BUTTON_RIGHT;
+            float lx = status.leftStick.x;
+            float ly = status.leftStick.y;
+            in.up    = (btn & VPAD_BUTTON_UP)    || ly >  0.5f;
+            in.down  = (btn & VPAD_BUTTON_DOWN)  || ly < -0.5f;
+            in.left  = (btn & VPAD_BUTTON_LEFT)  || lx < -0.5f;
+            in.right = (btn & VPAD_BUTTON_RIGHT) || lx >  0.5f;
             in.a     = btn & VPAD_BUTTON_A;
             in.b     = btn & VPAD_BUTTON_B;
             in.l     = btn & VPAD_BUTTON_L;
