@@ -559,7 +559,7 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         }
 
         if (m_fontSmall) renderText(renderer, mod.name, x+8, y+100, {220,220,240,255}, m_fontSmall);
-        if (m_fontTiny)  renderText(renderer, mod.author+" v"+mod.version, x+8, y+124, {110,110,140,255}, m_fontTiny);
+        if (m_fontTiny) { std::string av = mod.author+" v"+mod.version; if ((int)av.size() > 30) av = av.substr(0,27)+"..."; renderText(renderer, av, x+8, y+124, {110,110,140,255}, m_fontTiny); }
     }
 
     if (m_fontTiny) {
