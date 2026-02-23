@@ -21,8 +21,8 @@ cmake .. && make && ./cupstore_tests
 
 ## Workflow
 
-- `main` — stable, released builds only
-- `dev` — active development, PRs go here
+- `main`: stable, released builds only
+- `dev`: active development, PRs go here
 
 1. Fork and create a branch from `dev`
 2. Make your changes
@@ -34,7 +34,6 @@ PRs against `main` are only for hotfixes.
 ## Code Style
 
 - C++17, no exceptions in UI code
-- Prefer simple solutions over clever ones
 - Error handling: log + graceful fallback, never crash
 - New features that touch the repo format: update `validate.py` in cupstore-repo-template too
 
