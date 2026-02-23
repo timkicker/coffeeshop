@@ -121,14 +121,18 @@ void MainLayout::handleInput(const Input& input) {
     }
 
     if (input.l) {
-        if      (m_activeTab == Tab::Installed) m_activeTab = Tab::Browse;
-        else if (m_activeTab == Tab::Settings)  m_activeTab = Tab::Installed;
-        AudioManager::get().playSound(SoundId::Navigate);
+        if (m_activeTab == Tab::Browse) {
+            auto& games = m_repo.games;
+            if (!games.empty() && m_selectedGame > 0) { m_selectedGame--; m_selectedMod = 0; AudioManager::get().playSound(SoundId::Navigate); }
+        } else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Browse; AudioManager::get().playSound(SoundId::Navigate); }
+        else if (m_activeTab == Tab::Settings)  { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
     }
     if (input.r) {
-        if      (m_activeTab == Tab::Browse)    m_activeTab = Tab::Installed;
-        else if (m_activeTab == Tab::Installed) m_activeTab = Tab::Settings;
-        AudioManager::get().playSound(SoundId::Navigate);
+        if (m_activeTab == Tab::Browse) {
+            auto& games = m_repo.games;
+            if (!games.empty() && m_selectedGame < (int)games.size() - 1) { m_selectedGame++; m_selectedMod = 0; AudioManager::get().playSound(SoundId::Navigate); }
+        } else if (m_activeTab == Tab::Browse)    { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
+        else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Settings; AudioManager::get().playSound(SoundId::Navigate); }
     }
 
     if (m_activeTab == Tab::Browse)    handleBrowseInput(input);
@@ -145,8 +149,20 @@ void MainLayout::handleBrowseInput(const Input& input) {
     int   modCount = (int)mods.size();
     int   cols     = CARDS_PER_ROW;
 
-    if (input.right && (m_selectedMod % cols) < cols - 1 && m_selectedMod + 1 < modCount) { m_selectedMod++; AudioManager::get().playSound(SoundId::Navigate); }
-    if (input.left  && (m_selectedMod % cols) > 0) { m_selectedMod--; AudioManager::get().playSound(SoundId::Navigate); }
+    if (input.right) {
+        if ((m_selectedMod % cols) < cols - 1 && m_selectedMod + 1 < modCount) {
+            m_selectedMod++; AudioManager::get().playSound(SoundId::Navigate);
+        } else if (m_selectedGame < (int)games.size() - 1) {
+            m_selectedGame++; m_selectedMod = 0; AudioManager::get().playSound(SoundId::Navigate);
+        }
+    }
+    if (input.left) {
+        if ((m_selectedMod % cols) > 0) {
+            m_selectedMod--; AudioManager::get().playSound(SoundId::Navigate);
+        } else if (m_selectedMod == 0 && m_selectedGame > 0) {
+            m_selectedGame--; m_selectedMod = 0; AudioManager::get().playSound(SoundId::Navigate);
+        }
+    }
     if (input.down) { int n = m_selectedMod + cols; if (n < modCount) { m_selectedMod = n; AudioManager::get().playSound(SoundId::Navigate); } }
     if (input.up)   { int p = m_selectedMod - cols; if (p >= 0)       { m_selectedMod = p; AudioManager::get().playSound(SoundId::Navigate); } }
 
