@@ -25,12 +25,13 @@
 ## Screenshots
 
 <p align="center">
-  <img src="meta/branding/screenshots/browse.png" alt="Browse mods" width="48%"/>
   <img src="meta/branding/screenshots/detail.png" alt="Mod details" width="48%"/>
+  <img src="meta/branding/screenshots/settings.png" alt="App Settings" width="48%"/>
 </p>
 <p align="center">
-  <img src="meta/branding/screenshots/installed.png" alt="Installed mods" width="70%"/>
+  <img src="meta/branding/screenshots/browse.png" alt="Browse mods" width="70%"/>
 </p>
+
 
 
 ## Features
