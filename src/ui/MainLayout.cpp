@@ -508,7 +508,22 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
             thumbTex = ImageCache::get().texture(mod.thumbnail, renderer);
         }
         if (thumbTex) {
-            SDL_RenderCopy(renderer, thumbTex, nullptr, &thumb);
+            // Aspect-correct crop: scale to fill width, crop bottom
+            int tw = 0, th = 0;
+            SDL_QueryTexture(thumbTex, nullptr, nullptr, &tw, &th);
+            int thumbH = thumb.h; // target height
+            int thumbW = thumb.w; // target width
+            // Source rect: full width, crop height to match aspect
+            int srcH = (th * thumbW) / tw; // how tall src would be at target width
+            SDL_Rect src;
+            if (srcH <= thumbH) {
+                // Image is wider than target - use full height, crop width
+                src = {0, 0, tw, th};
+            } else {
+                // Image is taller - crop from top
+                src = {0, 0, tw, (tw * thumbH) / thumbW};
+            }
+            SDL_RenderCopy(renderer, thumbTex, &src, &thumb);
         } else {
             SDL_SetRenderDrawColor(renderer, 32, 32, 52, 255);
             SDL_RenderFillRect(renderer, &thumb);
