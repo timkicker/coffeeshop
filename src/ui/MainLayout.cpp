@@ -115,7 +115,7 @@ void MainLayout::handleInput(const Input& input) {
         return;
     }
 
-    if (input.y) {
+    if (input.plus) {
         m_app->pushScreen(std::make_unique<DownloadQueueScreen>(m_app));
         return;
     }
@@ -560,7 +560,7 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         const char* sortLabel = m_sortMode == SortMode::NameAZ ? "Sort: Name A-Z"
                               : m_sortMode == SortMode::Version ? "Sort: Version"
                               : "Sort: Default";
-        renderText(renderer, "D-Pad: navigate   A: details   L/R: game   ZL/ZR: sort   Y: downloads",
+        renderText(renderer, "D-Pad: navigate   A: details   L/R: game   ZL/ZR: sort   +: downloads",
                    cx+10, H-22, {70,70,95,255}, m_fontTiny);
         renderText(renderer, sortLabel, W-160, H-22, {100,160,100,255}, m_fontTiny);
     }
