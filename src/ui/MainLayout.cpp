@@ -685,7 +685,7 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
         SDL_RenderDrawRect(renderer, &card);
 
         if (m_fontSmall) {
-            std::string msg = "Uninstall "" + (mod.name.empty() ? mod.id : mod.name) + ""?";
+            std::string msg = "Uninstall '" + (mod.name.empty() ? mod.id : mod.name) + "'?";
             renderText(renderer, msg,               W/2-180, H/2-50, {255,255,255,255}, m_fontSmall);
             renderText(renderer, "This deletes the mod folder permanently.", W/2-180, H/2-22, {180,130,130,255}, m_fontSmall);
         }
