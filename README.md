@@ -20,7 +20,7 @@
   <img alt="Platform" src="https://img.shields.io/badge/platform-Wii%20U-lightgrey">
 </p>
 
----
+
 
 ## Screenshots
 
