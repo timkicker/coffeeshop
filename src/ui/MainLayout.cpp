@@ -327,7 +327,7 @@ void MainLayout::renderSidebar(SDL_Renderer* renderer) {
     SDL_RenderDrawLine(renderer, SIDEBAR_W, 0, SIDEBAR_W, H);
 
     if (m_fontNormal)
-        renderText(renderer, "CupStore", 20, 18, {255,255,255,255}, m_fontNormal);
+        renderText(renderer, "CoffeeShop", 20, 18, {255,255,255,255}, m_fontNormal);
 
     SDL_SetRenderDrawColor(renderer, 50, 50, 70, 255);
     SDL_RenderDrawLine(renderer, 15, 58, SIDEBAR_W-15, 58);
@@ -781,7 +781,7 @@ static std::vector<SItem> buildSettingsItems(const Config& cfg,
     info("Build", "Cemu / Debug");
 #endif
     info("Author", "Tim Kicker");
-    info("GitHub", "github.com/timkicker/cupstore");
+    info("GitHub", "github.com/timkicker/coffeeshop");
 
     return items;
 }

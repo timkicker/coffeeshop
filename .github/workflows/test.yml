@@ -22,4 +22,4 @@ jobs:
         run: |
           cd tests/build
           make -j$(nproc)
-          ./cupstore_tests
+          ./coffeeshop_tests

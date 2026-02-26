@@ -33,13 +33,13 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: CupStore ${{ github.ref_name }}
+          name: CoffeeShop ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: build/wiiu_mod_store.wuhb
           body: |
-            ## CupStore ${{ github.ref_name }}
+            ## CoffeeShop ${{ github.ref_name }}
 
             ### Installation
             1. Copy `wiiu_mod_store.wuhb` to `SD:/wiiu/apps/modstore/`
@@ -50,7 +50,7 @@ jobs:
             ```json
             {
               "repos": [
-                "https://raw.githubusercontent.com/timkicker/cupstore-repo-template/main/repo.json"
+                "https://raw.githubusercontent.com/timkicker/coffeeshop-repo-template/main/repo.json"
               ]
             }
             ```

@@ -19,7 +19,7 @@ labels: bug
 <!-- What actually happened? -->
 
 ## Environment
-- CupStore version: <!-- e.g. v0.1.2 -->
+- CoffeeShop version: <!-- e.g. v0.1.2 -->
 - Running on: <!-- Cemu / Hardware -->
 - If hardware: Aroma version, console region
 

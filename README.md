@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="CupStore" src="meta/branding/cupstore_banner_with_logo_xlarge_fixed.png" width="480">
+  <img alt="CoffeeShop" src="meta/branding/coffeeshop_banner_with_logo_xlarge_fixed.png" width="480">
 </p>
 
 
@@ -8,11 +8,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/timkicker/cupstore/actions">
-    <img alt="Build" src="https://img.shields.io/github/actions/workflow/status/timkicker/cupstore/release.yml?label=build&branch=main">
+  <a href="https://github.com/timkicker/coffeeshop/actions">
+    <img alt="Build" src="https://img.shields.io/github/actions/workflow/status/timkicker/coffeeshop/release.yml?label=build&branch=main">
   </a>
-  <a href="https://github.com/timkicker/cupstore/releases/latest">
-    <img alt="Release" src="https://img.shields.io/github/v/release/timkicker/cupstore?display_name=tag&sort=semver">
+  <a href="https://github.com/timkicker/coffeeshop/releases/latest">
+    <img alt="Release" src="https://img.shields.io/github/v/release/timkicker/coffeeshop?display_name=tag&sort=semver">
   </a>
   <a href="LICENSE">
     <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue.svg">
@@ -54,18 +54,18 @@
 
 ### Steps
 
-1. Download `wiiu_mod_store.wuhb` from the [latest release](https://github.com/timkicker/cupstore/releases/latest)
-2. Copy it to `SD:/wiiu/apps/cupstore/wiiu_mod_store.wuhb`
-3. Create `SD:/wiiu/apps/cupstore/config.json` with the [repos you want to use](#config.json-reference):
-4. Launch CupStore via the Homebrew Launcher
+1. Download `wiiu_mod_store.wuhb` from the [latest release](https://github.com/timkicker/coffeeshop/releases/latest)
+2. Copy it to `SD:/wiiu/apps/coffeeshop/wiiu_mod_store.wuhb`
+3. Create `SD:/wiiu/apps/coffeeshop/config.json` with the [repos you want to use](#config.json-reference):
+4. Launch CoffeeShop via the Homebrew Launcher
 
-> **Note:** CupStore does not come with a built-in mod repository. You need to provide your own repo URL. See [Hosting your own repo](#hosting-your-own-repo) below.
+> **Note:** CoffeeShop does not come with a built-in mod repository. You need to provide your own repo URL. See [Hosting your own repo](#hosting-your-own-repo) below.
 
 ## Hosting your own repo
 
-CupStore loads mods from community-hosted repositories. To host your own:
+CoffeeShop loads mods from community-hosted repositories. To host your own:
 
-1. Fork [cupstore-repo-template](https://github.com/timkicker/cupstore-repo-template)
+1. Fork [coffeeshop-repo-template](https://github.com/timkicker/coffeeshop-repo-template)
 2. Add your games and mods following the schema in the template README
 3. Point your `config.json` at your fork's raw `repo.json` URL
 
@@ -96,7 +96,7 @@ Branch strategy: `dev` is active development, `main` is stable/released. PRs go 
 Tests run without devkitPro:
 ```bash
 cd tests && mkdir -p build && cd build
-cmake .. && make && ./cupstore_tests
+cmake .. && make && ./coffeeshop_tests
 ```
 
 
