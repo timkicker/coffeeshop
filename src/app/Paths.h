@@ -12,7 +12,7 @@ namespace Paths {
     }
 
     inline std::string modstoreBase() {
-        return sdRoot() + "/wiiu/apps/modstore";
+        return sdRoot() + "/wiiu/apps/coffeeshop";
     }
 
     inline std::string cacheDir() {
