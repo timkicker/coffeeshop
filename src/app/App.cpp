@@ -1,4 +1,3 @@
-extern void elog(const char* msg);
 #include "App.h"
 #include "app/Input.h"
 #include "app/Config.h"
@@ -33,17 +32,14 @@ bool App::init() {
         LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
         return false;
     }
-    elog("SDL_Init OK");
     if (TTF_Init() != 0) {
         LOG_ERROR("TTF_Init failed: %s", TTF_GetError());
         return false;
     }
-    elog("TTF_Init OK");
     if (!IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG)) {
         LOG_ERROR("IMG_Init failed: %s", IMG_GetError());
         return false;
     }
-    elog("IMG_Init OK");
 
     m_window = SDL_CreateWindow(
         "Wii U Mod Store",
@@ -55,25 +51,19 @@ bool App::init() {
         LOG_ERROR("SDL_CreateWindow failed: %s", SDL_GetError());
         return false;
     }
-    elog("Window OK");
 
     m_renderer = SDL_CreateRenderer(m_window, -1,
-        0);
+        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!m_renderer) {
         LOG_ERROR("SDL_CreateRenderer failed: %s", SDL_GetError());
         return false;
     }
-    elog("Renderer OK");
 
-    elog("before logger");
-    mkdir((Paths::modstoreBase()).c_str(), 0755);
-    elog("mkdir done");
-    Logger::get().init(Paths::modstoreBase() + "/app.log");
-    elog("logger init done");
-    LOG_INFO("App started");
-    elog("before pushScreen");
     pushScreen(std::make_unique<MainLayout>(this));
-    elog("after pushScreen");
+    // Ensure modstore dir exists for log file
+    mkdir((Paths::modstoreBase()).c_str(), 0755);
+    Logger::get().init(Paths::modstoreBase() + "/app.log");
+    LOG_INFO("App started");
     CacheManager::cleanupStaleZips();
     CacheManager::cleanupCorruptMods();
     DownloadQueue::get().start();

@@ -12,7 +12,6 @@
 #include <algorithm>
 #include "util/ImageCache.h"
 #include "audio/AudioManager.h"
-extern void elog(const char* msg);
 
 static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 static constexpr int CARDS_PER_ROW = 3;
@@ -31,17 +30,14 @@ MainLayout::~MainLayout() {
 }
 
 void MainLayout::onEnter() {
-    elog("onEnter start");
     m_fontNormal = TTF_OpenFont(FONT_PATH, 26);
     m_fontSmall  = TTF_OpenFont(FONT_PATH, 18);
     m_fontTiny   = TTF_OpenFont(FONT_PATH, 14);
-    elog("fonts done");
     m_config.load();
     m_showOnboarding = !m_config.hasRepos();
     if (!m_showOnboarding && !m_config.repos.empty()) {
         m_fetchState = FetchState::Loading;
-        elog("config done");
-    m_fetchThread = std::thread([this]() {
+        m_fetchThread = std::thread([this]() {
             Repo combined;
             std::string lastError;
 
