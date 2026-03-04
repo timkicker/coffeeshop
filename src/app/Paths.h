@@ -8,7 +8,7 @@ namespace Paths {
     extern bool sdMounted;
 
     inline std::string sdRoot() {
-        return sdMounted ? "sd:" : "/vol/external01";
+        return sdMounted ? "fs:/vol/external01" : "/vol/external01";
     }
 
     inline std::string modstoreBase() {
