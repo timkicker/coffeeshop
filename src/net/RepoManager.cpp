@@ -13,9 +13,7 @@ static size_t writeString(char* ptr, size_t size, size_t nmemb, std::string* s) 
 
 bool RepoManager::validateUrl(const std::string& url) {
     if (url.empty()) return false;
-    // Must start with http:// or https://
     if (url.substr(0, 7) != "http://" && url.substr(0, 8) != "https://") return false;
-    // Must have something after the scheme
     size_t schemeEnd = url.find("://");
     if (schemeEnd == std::string::npos) return false;
     std::string rest = url.substr(schemeEnd + 3);
@@ -24,35 +22,35 @@ bool RepoManager::validateUrl(const std::string& url) {
 }
 
 static std::string fetchUrl(const std::string& url, std::string& error) {
+    LOG_INFO("fetchUrl: %s", url.c_str());
     std::string body;
     CURL* curl = curl_easy_init();
     if (!curl) { error = "curl_easy_init failed"; return ""; }
-
     curl_easy_setopt(curl, CURLOPT_URL,            url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,  writeString);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA,      &body);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT,        30L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL,       1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT,      "WiiUModStore/0.1");
-
+    LOG_INFO("calling curl_easy_perform...");
     CURLcode res = curl_easy_perform(curl);
+    LOG_INFO("curl returned: %d", res);
     long httpCode = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
     curl_easy_cleanup(curl);
-
-    if (res != CURLE_OK) { error = curl_easy_strerror(res); return ""; }
+    if (res != CURLE_OK) { error = curl_easy_strerror(res); LOG_ERROR("curl error: %s", error.c_str()); return ""; }
     if (httpCode >= 400) { error = "HTTP " + std::to_string(httpCode); return ""; }
     if (body.empty())    { error = "Empty response"; return ""; }
+    LOG_INFO("fetchUrl OK: %zu bytes", body.size());
     return body;
 }
 
-// Resolve a relative path against a base URL
-// e.g. base = "https://host/repo.json", path = "games/mk8/game.json"
-// -> "https://host/games/mk8/game.json"
 static std::string resolveUrl(const std::string& base, const std::string& path) {
-    if (path.substr(0, 4) == "http") return path; // already absolute
+    if (path.substr(0, 4) == "http") return path;
     size_t slash = base.rfind('/');
     if (slash == std::string::npos) return path;
     return base.substr(0, slash + 1) + path;
@@ -76,12 +74,10 @@ void RepoManager::fetch(const std::string& url) {
         return;
     }
 
-    // Parse index
     try {
         auto j = nlohmann::json::parse(body);
         m_repo.name = j.value("name", "Unknown Repo");
 
-        // Format version check
         int formatVersion = j.value("formatVersion", 1);
         if (formatVersion < REPO_FORMAT_MIN) {
             LOG_WARN("RepoManager: repo format %d is older than min supported (%d), continuing anyway",
@@ -101,7 +97,6 @@ void RepoManager::fetch(const std::string& url) {
 
         for (auto& jg : j["games"]) {
             if (jg.contains("path")) {
-                // Indirect reference - fetch the game.json
                 std::string gamePath = jg["path"].get<std::string>();
                 std::string gameUrl  = resolveUrl(url, gamePath);
                 LOG_INFO("RepoManager: fetching game from %s", gameUrl.c_str());
@@ -113,7 +108,6 @@ void RepoManager::fetch(const std::string& url) {
                 }
                 parseGame(gameBody);
             } else {
-                // Inline game object
                 parseGame(jg.dump());
             }
         }
@@ -126,7 +120,6 @@ void RepoManager::fetch(const std::string& url) {
     if (m_repo.games.empty())
         m_lastError = "Repo contains no valid mods";
 }
-
 
 std::optional<Game> RepoManager::parseGameFromJson(const std::string& json) {
     auto jg = nlohmann::json::parse(json);
