@@ -42,10 +42,12 @@ void MainLayout::onEnter() {
         m_fetchState = FetchState::Loading;
         elog("config done");
     m_fetchThread = std::thread([this]() {
+        LOG_INFO("Fetch thread started");
             Repo combined;
             std::string lastError;
 
             for (auto& url : m_config.repos) {
+                LOG_INFO("Processing repo: %s", url.c_str());
                 RepoManager rm;
                 rm.fetch(url);
                 {
@@ -58,15 +60,19 @@ void MainLayout::onEnter() {
                     continue;
                 }
                 // Merge games from this repo into combined
-                for (auto& g : rm.repo().games)
+                for (auto& g : rm.repo().games){
+                    LOG_INFO("Merging %zu games from repo", rm.repo().games.size());
                     combined.games.push_back(g);
+                }
             }
 
             std::lock_guard<std::mutex> lock(m_repoMutex);
+            LOG_INFO("Fetch loop done, %zu total games", combined.games.size());
             m_repo = combined;
             if (combined.games.empty()) {
                 m_fetchError = lastError.empty() ? "No repos returned any mods" : lastError;
                 m_fetchState = FetchState::Error;
+                LOG_INFO("Starting conflict check...");
             } else {
                 m_fetchState = FetchState::Done;
                 // Auto-conflict check: scan installed and warn if any conflicts exist
