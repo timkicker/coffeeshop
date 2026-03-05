@@ -1,6 +1,5 @@
 #include "ConflictChecker.h"
 #include "util/Logger.h"
-
 #include <dirent.h>
 #include <sys/stat.h>
 #include <algorithm>
@@ -36,14 +35,11 @@ std::vector<std::string> ConflictChecker::collectFiles(const std::string& modPat
     return files;
 }
 
-// Pure logic - no filesystem access
 ConflictResult ConflictChecker::checkFiles(const std::vector<std::string>& modFiles,
                                             const std::vector<ModFiles>& others) {
     ConflictResult result;
     if (modFiles.empty()) return result;
-
     std::unordered_set<std::string> mySet(modFiles.begin(), modFiles.end());
-
     for (auto& other : others) {
         for (auto& f : other.files) {
             if (mySet.count(f)) {
@@ -59,19 +55,26 @@ ConflictResult ConflictChecker::checkFiles(const std::vector<std::string>& modFi
     return result;
 }
 
-// Filesystem wrapper - calls checkFiles internally
 ConflictResult ConflictChecker::check(const InstalledMod& mod,
                                        const std::vector<InstalledMod>& allMods) {
+    LOG_INFO("ConflictChecker::check start for mod: %s", mod.id.c_str());
+    LOG_INFO("Collecting files from: %s", mod.path.c_str());
     auto myFiles = collectFiles(mod.path);
-
+    LOG_INFO("Collected %zu files", myFiles.size());
+    
     std::vector<ModFiles> others;
+    LOG_INFO("Building comparison list from %zu total mods", allMods.size());
     for (auto& other : allMods) {
         if (other.id == mod.id) continue;
         if (!other.active) continue;
         if (other.titleId != mod.titleId) continue;
+        LOG_INFO("Collecting files for comparison mod: %s", other.id.c_str());
         others.push_back({other.name.empty() ? other.id : other.name,
                           collectFiles(other.path)});
     }
-
-    return checkFiles(myFiles, others);
+    
+    LOG_INFO("Calling checkFiles with %zu comparison mods", others.size());
+    auto result = checkFiles(myFiles, others);
+    LOG_INFO("ConflictChecker::check done, hasConflict: %d", result.hasConflict);
+    return result;
 }
