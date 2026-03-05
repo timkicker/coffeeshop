@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <algorithm>
 #include <unordered_set>
+#include <chrono>
 
 static bool isDir(const std::string& path) {
     struct stat st;
@@ -30,8 +31,12 @@ void ConflictChecker::collectFilesRec(const std::string& base,
 }
 
 std::vector<std::string> ConflictChecker::collectFiles(const std::string& modPath) {
+    auto start = std::chrono::steady_clock::now();
     std::vector<std::string> files;
     collectFilesRec(modPath, "", files);
+    auto end = std::chrono::steady_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    LOG_INFO("collectFiles: %zu files in %lld ms", files.size(), (long long)ms);
     return files;
 }
 
@@ -60,7 +65,6 @@ ConflictResult ConflictChecker::check(const InstalledMod& mod,
     LOG_INFO("ConflictChecker::check start for mod: %s", mod.id.c_str());
     LOG_INFO("Collecting files from: %s", mod.path.c_str());
     auto myFiles = collectFiles(mod.path);
-    LOG_INFO("Collected %zu files", myFiles.size());
     
     std::vector<ModFiles> others;
     LOG_INFO("Building comparison list from %zu total mods", allMods.size());
