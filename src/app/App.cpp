@@ -76,7 +76,7 @@ bool App::init() {
     }
     elog("Window OK");
 
-    m_renderer = SDL_CreateRenderer(m_window, -1, 0);
+    m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
     if (!m_renderer) {
         LOG_ERROR("SDL_CreateRenderer failed: %s", SDL_GetError());
         return false;
