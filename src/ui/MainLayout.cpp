@@ -80,8 +80,11 @@ void MainLayout::onEnter() {
                 auto installed = InstalledScanner::scan();
                 LOG_INFO("scan() returned, vector size: %zu", installed.size());
                 std::vector<InstalledMod> active;
+                LOG_INFO("Created active vector, filtering...");
                 for (auto& m : installed) if (m.active) active.push_back(m);
+                LOG_INFO("Filter done, %zu active mods", active.size());
                 m_startupConflicts.clear();
+                LOG_INFO("Cleared conflicts, starting check...");
                 for (auto& m : active) {
                     auto res = ConflictChecker::check(m, active);
                     if (res.hasConflict) {
