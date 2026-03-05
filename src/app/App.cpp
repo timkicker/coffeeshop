@@ -16,6 +16,15 @@ extern void elog(const char* msg);
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_image.h>
 
+#ifdef __WUT__
+#if BUILD_HW
+#include <nn/ac.h>
+extern "C" {
+    void socket_lib_init();
+}
+#endif
+#endif
+
 App::App() = default;
 
 App::~App() {
@@ -29,6 +38,16 @@ App::~App() {
 }
 
 bool App::init() {
+    elog("Network init...");
+#ifdef __WUT__
+#if BUILD_HW
+    nn::ac::Initialize();
+    nn::ac::Connect();
+    socket_lib_init();
+    elog("Network ready");
+#endif
+#endif
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) != 0) {
         LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
         return false;
@@ -57,8 +76,7 @@ bool App::init() {
     }
     elog("Window OK");
 
-    m_renderer = SDL_CreateRenderer(m_window, -1,
-        0);
+    m_renderer = SDL_CreateRenderer(m_window, -1, 0);
     if (!m_renderer) {
         LOG_ERROR("SDL_CreateRenderer failed: %s", SDL_GetError());
         return false;

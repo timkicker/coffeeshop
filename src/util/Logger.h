@@ -1,53 +1,48 @@
 #pragma once
 #include <cstdio>
 #include <cstdarg>
-#include <mutex>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 class Logger {
 public:
     static Logger& get() { static Logger l; return l; }
 
     void init(const std::string& path) {
-        std::lock_guard<std::mutex> lock(m_mutex);
         if (m_file) fclose(m_file);
         m_file = fopen(path.c_str(), "w");
-        m_path = path;
+        if (m_file) {
+            fprintf(m_file, "LOGGER READY\n");
+            fflush(m_file);
+            fsync(fileno(m_file));
+        }
     }
 
     void log(const char* level, const char* fmt, va_list args) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
-        char buf[512];
-        vsnprintf(buf, sizeof(buf), fmt, args);
-
-        // stdout
-        fprintf(stdout, "[%s] %s\n", level, buf);
-
-        // file
-        if (m_file) {
-            fprintf(m_file, "[%s] %s\n", level, buf);
-            fflush(m_file);
-        }
-
-        // in-memory ring buffer for log viewer (last 200 lines)
-        std::string line = std::string("[") + level + "] " + buf;
-        m_lines.push_back(line);
-        if (m_lines.size() > 200) m_lines.erase(m_lines.begin());
+        if (!m_file) return;
+        fprintf(m_file, "[%s] ", level);
+        vfprintf(m_file, fmt, args);
+        fprintf(m_file, "\n");
+        fflush(m_file);
+        fsync(fileno(m_file));
     }
 
-    const std::vector<std::string>& lines() const { return m_lines; }
-    const std::string& path() const { return m_path; }
+    const std::vector<std::string>& lines() const {
+        static std::vector<std::string> empty;
+        return empty;
+    }
+
+    const std::string& path() const {
+        static std::string p;
+        return p;
+    }
 
     ~Logger() { if (m_file) fclose(m_file); }
 
 private:
     Logger() = default;
-    FILE*                    m_file = nullptr;
-    std::string              m_path;
-    std::vector<std::string> m_lines;
-    std::mutex               m_mutex;
+    FILE* m_file = nullptr;
 };
 
 inline void _log(const char* level, const char* fmt, ...) {
