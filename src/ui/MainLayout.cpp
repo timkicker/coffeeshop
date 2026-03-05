@@ -107,7 +107,7 @@ void MainLayout::refreshInstalled() {
 }
 
 void MainLayout::handleInput(const Input& input) {
-    if (input.home) {
+    if (input.minus) {
         if (m_fetchThread.joinable()) m_fetchThread.detach();
         m_app->quit();
         return;
@@ -367,7 +367,7 @@ void MainLayout::renderSidebar(SDL_Renderer* renderer) {
 
     SDL_Color grey = {80, 80, 105, 255};
     if (m_fontTiny) {
-        renderText(renderer, "Home: exit",       12, H-62, grey, m_fontTiny);
+        renderText(renderer, "Minus: exit",       12, H-62, grey, m_fontTiny);
         renderText(renderer, "Y: downloads",    12, H-26, grey, m_fontTiny);
         renderText(renderer, "L/R: switch tab", 12, H-44, grey, m_fontTiny);
     }

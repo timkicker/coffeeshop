@@ -92,12 +92,16 @@ void DownloadQueue::workerLoop() {
 
         {
             std::unique_lock<std::mutex> lock(m_mutex);
-            m_cv.wait_for(lock, std::chrono::seconds(5), [this] {
-                if (!m_running) return true;
+            lock.unlock();
+            // Poll instead of condition_variable (more reliable on WUT)
+            for (int i = 0; i < 50 && m_running; i++) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::lock_guard<std::mutex> pl(m_mutex);
                 for (auto& j : m_jobs)
-                    if (j.state == DownloadJob::State::Pending) return true;
-                return false;
-            });
+                    if (j.state == DownloadJob::State::Pending) goto done_waiting;
+            }
+            done_waiting:
+            lock.lock();
 
             if (!m_running) break;
 
