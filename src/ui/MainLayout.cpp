@@ -73,28 +73,6 @@ void MainLayout::onEnter() {
                 m_fetchError = lastError.empty() ? "No repos returned any mods" : lastError;
                 m_fetchState = FetchState::Error;
                 LOG_INFO("Starting conflict check...");
-            } else {
-                m_fetchState = FetchState::Done;
-                // Auto-conflict check: scan installed and warn if any conflicts exist
-                LOG_INFO("About to call InstalledScanner::scan()...");
-                auto installed = InstalledScanner::scan();
-                LOG_INFO("scan() returned, vector size: %zu", installed.size());
-                std::vector<InstalledMod> active;
-                LOG_INFO("Created active vector, filtering...");
-                for (auto& m : installed) if (m.active) active.push_back(m);
-                LOG_INFO("Filter done, %zu active mods", active.size());
-                m_startupConflicts.clear();
-                LOG_INFO("Cleared conflicts, starting check...");
-                for (auto& m : active) {
-                    auto res = ConflictChecker::check(m, active);
-                    if (res.hasConflict) {
-                        m_startupConflicts.push_back({m.name, res.conflictingMods});
-                    }
-                }
-                if (!m_startupConflicts.empty()) m_showStartupConflicts = true;
-                LOG_INFO("Conflict check done, %zu conflicts", m_startupConflicts.size());
-            }
-        });
             LOG_INFO("Fetch thread ending");
     }
 }
