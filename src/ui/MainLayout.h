@@ -60,6 +60,7 @@ private:
     std::string             m_fetchError;
     std::map<std::string, std::string> m_repoStatus; // url -> "OK" or error msg
     std::thread             m_fetchThread;
+    std::atomic<bool>       m_stopFetch { false };
     std::mutex              m_repoMutex;
     Repo                    m_repo;
     int m_selectedGame = 0;

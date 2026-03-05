@@ -13,6 +13,7 @@ extern void elog(const char* msg);
 #include "app/CacheManager.h"
 
 #include <SDL2/SDL.h>
+#include <whb/proc.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_image.h>
 
@@ -101,7 +102,7 @@ bool App::init() {
 
 void App::run() {
     m_running = true;
-    while (m_running && !m_screens.empty()) {
+    while (m_running && !m_screens.empty() && WHBProcIsRunning()) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) m_running = false;

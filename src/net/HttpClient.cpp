@@ -21,7 +21,7 @@ bool HttpClient::get(const std::string& url, std::string& result) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);  // Connection timeout
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);         // Total timeout
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);         // Total timeout
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);         // CRITICAL for embedded
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);

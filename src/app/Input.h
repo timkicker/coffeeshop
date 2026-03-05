@@ -16,6 +16,7 @@ struct Input {
     bool zr    = false;
     bool plus  = false;
     bool minus = false;
+    bool home  = false;
 
     static Input read() {
         Input in;
@@ -39,6 +40,7 @@ struct Input {
             in.zr    = btn & VPAD_BUTTON_ZR;
             in.plus  = btn & VPAD_BUTTON_PLUS;
             in.minus = btn & VPAD_BUTTON_MINUS;
+            in.home  = btn & VPAD_BUTTON_HOME;
         }
         return in;
     }
