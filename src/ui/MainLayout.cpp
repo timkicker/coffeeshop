@@ -76,7 +76,9 @@ void MainLayout::onEnter() {
             } else {
                 m_fetchState = FetchState::Done;
                 // Auto-conflict check: scan installed and warn if any conflicts exist
+                LOG_INFO("About to call InstalledScanner::scan()...");
                 auto installed = InstalledScanner::scan();
+                LOG_INFO("scan() returned, vector size: %zu", installed.size());
                 std::vector<InstalledMod> active;
                 for (auto& m : installed) if (m.active) active.push_back(m);
                 m_startupConflicts.clear();
