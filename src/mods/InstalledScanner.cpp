@@ -2,7 +2,6 @@
 #include "InstalledScanner.h"
 #include "app/Paths.h"
 #include "util/Logger.h"
-
 #include <json.hpp>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -37,9 +36,13 @@ static bool rmrf(const std::string& path) {
 }
 
 static std::vector<std::string> listDirs(const std::string& path) {
+    LOG_INFO("listDirs: %s", path.c_str());
     std::vector<std::string> result;
     DIR* d = opendir(path.c_str());
-    if (!d) return result;
+    if (!d) {
+        LOG_WARN("listDirs: opendir failed for %s", path.c_str());
+        return result;
+    }
     struct dirent* e;
     while ((e = readdir(d)) != nullptr) {
         std::string name = e->d_name;
@@ -48,6 +51,7 @@ static std::vector<std::string> listDirs(const std::string& path) {
             result.push_back(name);
     }
     closedir(d);
+    LOG_INFO("listDirs: found %zu dirs", result.size());
     return result;
 }
 
@@ -58,7 +62,7 @@ static InstalledMod readMod(const std::string& basePath,
     InstalledMod mod;
     mod.titleId = titleId;
     mod.id      = modId;
-    mod.name    = modId; // fallback
+    mod.name    = modId;
     mod.active  = active;
     mod.path    = basePath + "/" + titleId + "/" + modId;
 
@@ -75,24 +79,30 @@ static InstalledMod readMod(const std::string& basePath,
 }
 
 std::vector<InstalledMod> InstalledScanner::scan() {
+    LOG_INFO("InstalledScanner::scan() start");
     std::vector<InstalledMod> result;
-
-    // Active mods: sdcafiine/[titleId]/[modId]
+    
     std::string activeBase = Paths::sdcafiineBase();
+    LOG_INFO("Scanning active mods in: %s", activeBase.c_str());
     for (auto& titleId : listDirs(activeBase)) {
+        LOG_INFO("Active titleId: %s", titleId.c_str());
         for (auto& modId : listDirs(activeBase + "/" + titleId)) {
+            LOG_INFO("Active mod: %s/%s", titleId.c_str(), modId.c_str());
             result.push_back(readMod(activeBase, titleId, modId, true));
         }
     }
 
-    // Disabled mods: disabled/[titleId]/[modId]
     std::string disabledBase = Paths::disabledBase();
+    LOG_INFO("Scanning disabled mods in: %s", disabledBase.c_str());
     for (auto& titleId : listDirs(disabledBase)) {
+        LOG_INFO("Disabled titleId: %s", titleId.c_str());
         for (auto& modId : listDirs(disabledBase + "/" + titleId)) {
+            LOG_INFO("Disabled mod: %s/%s", titleId.c_str(), modId.c_str());
             result.push_back(readMod(disabledBase, titleId, modId, false));
         }
     }
-
+    
+    LOG_INFO("InstalledScanner::scan() done: %zu mods", result.size());
     return result;
 }
 
