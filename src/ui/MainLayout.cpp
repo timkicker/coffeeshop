@@ -92,8 +92,10 @@ void MainLayout::onEnter() {
                     }
                 }
                 if (!m_startupConflicts.empty()) m_showStartupConflicts = true;
+                LOG_INFO("Conflict check done, %zu conflicts", m_startupConflicts.size());
             }
         });
+            LOG_INFO("Fetch thread ending");
     }
 }
 
