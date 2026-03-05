@@ -6,6 +6,7 @@
 #include "audio/AudioManager.h"
 #include <whb/log_udp.h>
 #include <cstdio>
+#include <unistd.h>
 
 #ifdef __WUT__
 #include <sys/iosupport.h>
@@ -17,16 +18,16 @@ extern "C" {
 
 static FILE* g_elog = nullptr;
 void elog(const char* msg) {
-    if (g_elog) { fprintf(g_elog, "%s\n", msg); fflush(g_elog); }
+    if (g_elog) { 
+        fprintf(g_elog, "%s\n", msg); 
+        fflush(g_elog);
+        fsync(fileno(g_elog));
+    }
 }
 
 int main(int argc, char** argv) {
     WHBProcInit();
     WHBLogUdpInit();
-
-    // Open early log before anything else
-    g_elog = fopen("fs:/vol/external01/wiiu/apps/coffeeshop/early.log", "w");
-    elog("START");
 
 #ifdef __WUT__
 #if BUILD_HW
@@ -34,10 +35,13 @@ int main(int argc, char** argv) {
 #else
     Paths::sdMounted = false;
 #endif
-    elog(Paths::sdMounted ? "SD mounted" : "SD failed");
 #else
     Paths::sdMounted = false;
 #endif
+
+    g_elog = fopen("fs:/vol/external01/wiiu/apps/coffeeshop/early.log", "w");
+    elog("START");
+    elog(Paths::sdMounted ? "SD mounted" : "SD failed");
 
     elog("before App init");
     App app;
