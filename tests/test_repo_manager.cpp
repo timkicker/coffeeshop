@@ -138,3 +138,125 @@ TEST_CASE("parseGameFromJson - modpack type parsed correctly", "[repo]") {
     REQUIRE(result->mods[0].type == "modpack");
     REQUIRE(result->mods[0].includes.size() == 2);
 }
+
+// ─── formatVersion validation tests ──────────────────────────────────────
+
+TEST_CASE("parseGameFromJson - formatVersion is optional field", "[repo]") {
+    // formatVersion is checked at repo level, not game level
+    // This just ensures game parsing doesn't break if it appears
+    auto j = validGame();
+    j["formatVersion"] = 1;
+    REQUIRE(RepoManager::parseGameFromJson(j.dump()).has_value());
+}
+
+// ─── Edge cases not yet covered ──────────────────────────────────────────
+
+TEST_CASE("parseGameFromJson - titleIds as single string not array", "[repo]") {
+    auto j = validGame();
+    j.erase("titleIds");
+    j["titleIds"] = "000500001010EB00"; // single string, not array
+    // Should fail - we require array
+    REQUIRE_FALSE(RepoManager::parseGameFromJson(j.dump()).has_value());
+}
+
+TEST_CASE("parseGameFromJson - empty titleIds array", "[repo]") {
+    auto j = validGame();
+    j["titleIds"] = nlohmann::json::array();
+    REQUIRE_FALSE(RepoManager::parseGameFromJson(j.dump()).has_value());
+}
+
+TEST_CASE("parseGameFromJson - empty mods array", "[repo]") {
+    auto j = validGame();
+    j["mods"] = nlohmann::json::array();
+    REQUIRE_FALSE(RepoManager::parseGameFromJson(j.dump()).has_value());
+}
+
+TEST_CASE("parseGameFromJson - mods not array", "[repo]") {
+    auto j = validGame();
+    j["mods"] = "not-an-array";
+    REQUIRE_FALSE(RepoManager::parseGameFromJson(j.dump()).has_value());
+}
+
+TEST_CASE("parseGameFromJson - invalid JSON syntax", "[repo]") {
+    REQUIRE_FALSE(RepoManager::parseGameFromJson("{broken json").has_value());
+    REQUIRE_FALSE(RepoManager::parseGameFromJson("").has_value());
+}
+
+TEST_CASE("parseGameFromJson - mod with empty required fields", "[repo]") {
+    auto j = validGame();
+    j["mods"][0]["id"] = "";
+    REQUIRE_FALSE(RepoManager::parseGameFromJson(j.dump()).has_value());
+}
+
+TEST_CASE("parseGameFromJson - mod type defaults to mod if missing", "[repo]") {
+    auto j = validGame();
+    j["mods"][0].erase("type");
+    auto result = RepoManager::parseGameFromJson(j.dump());
+    REQUIRE(result.has_value());
+    REQUIRE(result->mods[0].type == "mod");
+}
+
+TEST_CASE("parseGameFromJson - mod author defaults to Unknown if missing", "[repo]") {
+    auto j = validGame();
+    j["mods"][0].erase("author");
+    auto result = RepoManager::parseGameFromJson(j.dump());
+    REQUIRE(result.has_value());
+    REQUIRE(result->mods[0].author == "Unknown");
+}
+
+TEST_CASE("parseGameFromJson - screenshots as non-array is ignored", "[repo]") {
+    auto j = validGame();
+    j["mods"][0]["screenshots"] = "not-an-array";
+    auto result = RepoManager::parseGameFromJson(j.dump());
+    REQUIRE(result.has_value());
+    REQUIRE(result->mods[0].screenshots.empty());
+}
+
+TEST_CASE("parseGameFromJson - tags as non-array is ignored", "[repo]") {
+    auto j = validGame();
+    j["mods"][0]["tags"] = "not-an-array";
+    auto result = RepoManager::parseGameFromJson(j.dump());
+    REQUIRE(result.has_value());
+    REQUIRE(result->mods[0].tags.empty());
+}
+
+TEST_CASE("parseGameFromJson - fileSize as string is ignored", "[repo]") {
+    auto j = validGame();
+    j["mods"][0]["fileSize"] = "not-a-number";
+    auto result = RepoManager::parseGameFromJson(j.dump());
+    REQUIRE(result.has_value());
+    REQUIRE(result->mods[0].fileSize == 0);
+}
+
+TEST_CASE("parseGameFromJson - negative fileSize becomes 0", "[repo]") {
+    auto j = validGame();
+    j["mods"][0]["fileSize"] = -1000;
+    auto result = RepoManager::parseGameFromJson(j.dump());
+    REQUIRE(result.has_value());
+    REQUIRE(result->mods[0].fileSize == 0);
+}
+
+// ─── validateUrl edge cases ──────────────────────────────────────────────
+
+TEST_CASE("validateUrl - https with port", "[repo]") {
+    REQUIRE(RepoManager::validateUrl("https://example.com:8080/repo.json"));
+}
+
+TEST_CASE("validateUrl - localhost", "[repo]") {
+    REQUIRE(RepoManager::validateUrl("http://localhost/repo.json"));
+    REQUIRE(RepoManager::validateUrl("http://127.0.0.1/repo.json"));
+}
+
+TEST_CASE("validateUrl - query parameters", "[repo]") {
+    REQUIRE(RepoManager::validateUrl("https://example.com/repo.json?v=1"));
+}
+
+TEST_CASE("validateUrl - fragment", "[repo]") {
+    REQUIRE(RepoManager::validateUrl("https://example.com/repo.json#section"));
+}
+
+
+TEST_CASE("validateUrl - very short invalid", "[repo]") {
+    REQUIRE_FALSE(RepoManager::validateUrl("ht"));
+    REQUIRE_FALSE(RepoManager::validateUrl("htt"));
+}

@@ -122,63 +122,80 @@ void RepoManager::fetch(const std::string& url) {
 }
 
 std::optional<Game> RepoManager::parseGameFromJson(const std::string& json) {
-    auto jg = nlohmann::json::parse(json);
-    if (!jg.contains("name") || (!jg.contains("titleIds") && !jg.contains("title_ids")) || !jg.contains("mods")) {
-        LOG_WARN("RepoManager: skipping game - missing required fields");
+    try {
+        auto jg = nlohmann::json::parse(json);
+        if (!jg.contains("name") || (!jg.contains("titleIds") && !jg.contains("title_ids")) || !jg.contains("mods")) {
+            LOG_WARN("RepoManager: skipping game - missing required fields");
+            return std::nullopt;
+        }
+        Game game;
+        game.name = jg["name"].get<std::string>();
+        game.icon = jg.value("icon", "");
+        
+        // titleIds validation
+        auto tids = jg.contains("titleIds") ? jg["titleIds"] : jg["title_ids"];
+        if (!tids.is_array() || tids.empty()) {
+            LOG_WARN("RepoManager: skipping game - titleIds must be non-empty array");
+            return std::nullopt;
+        }
+        for (auto& tid : tids) game.titleIds.push_back(tid.get<std::string>());
+        
+        // mods validation
+        if (!jg["mods"].is_array() || jg["mods"].empty()) {
+            LOG_WARN("RepoManager: skipping game - mods must be non-empty array");
+            return std::nullopt;
+        }
+        
+        for (auto& jm : jg["mods"]) {
+            if (!jm.contains("id") || !jm.contains("name") ||
+                !jm.contains("version") || !jm.contains("download")) {
+                LOG_WARN("RepoManager: skipping mod - missing required fields");
+                continue;
+            }
+            Mod mod;
+            mod.id = jm["id"].get<std::string>();
+            bool validId = !mod.id.empty() && std::all_of(mod.id.begin(), mod.id.end(),
+                [](char c){ return isalnum(c) || c == '-' || c == '_'; });
+            if (!validId) { LOG_WARN("RepoManager: skipping mod with invalid id: %s", mod.id.c_str()); continue; }
+            mod.name        = jm["name"].get<std::string>();
+            mod.version     = jm["version"].get<std::string>();
+            mod.download    = jm["download"].get<std::string>();
+            mod.author      = jm.value("author", "Unknown");
+            mod.description = jm.value("description", "");
+            mod.type        = jm.value("type", "mod");
+            mod.thumbnail   = jm.value("thumbnail", "");
+            if (jm.contains("includes") && jm["includes"].is_array())
+                for (auto& s : jm["includes"]) mod.includes.push_back(s.get<std::string>());
+            if (jm.contains("screenshots") && jm["screenshots"].is_array())
+                for (auto& s : jm["screenshots"]) mod.screenshots.push_back(s.get<std::string>());
+            mod.releaseDate = jm.value("releaseDate", "");
+            mod.changelog   = jm.value("changelog", "");
+            mod.license     = jm.value("license", "");
+            
+            // fileSize with type check and bounds validation
+            if (jm.contains("fileSize") && jm["fileSize"].is_number()) {
+                int64_t size = jm["fileSize"].get<int64_t>();
+                mod.fileSize = (size > 0) ? static_cast<uint64_t>(size) : 0;
+            }
+            
+            if (jm.contains("requirements") && jm["requirements"].is_array())
+                for (auto& s : jm["requirements"]) mod.requirements.push_back(s.get<std::string>());
+            if (jm.contains("tags") && jm["tags"].is_array())
+                for (auto& s : jm["tags"]) mod.tags.push_back(s.get<std::string>());
+            if (!RepoManager::validateUrl(mod.download)) {
+                LOG_WARN("RepoManager: skipping mod '%s' - invalid download URL", mod.id.c_str());
+                continue;
+            }
+            game.mods.push_back(std::move(mod));
+        }
+        if (game.mods.empty()) return std::nullopt;
+        return game;
+    } catch (const nlohmann::json::exception& e) {
+        LOG_WARN("RepoManager: JSON parse error: %s", e.what());
         return std::nullopt;
     }
-
-    Game game;
-    game.name = jg["name"].get<std::string>();
-    game.icon = jg.value("icon", "");
-    auto tids = jg.contains("titleIds") ? jg["titleIds"] : jg["title_ids"];
-    for (auto& tid : tids) game.titleIds.push_back(tid.get<std::string>());
-
-    for (auto& jm : jg["mods"]) {
-        if (!jm.contains("id") || !jm.contains("name") ||
-            !jm.contains("version") || !jm.contains("download")) {
-            LOG_WARN("RepoManager: skipping mod - missing required fields");
-            continue;
-        }
-        Mod mod;
-        mod.id = jm["id"].get<std::string>();
-        bool validId = !mod.id.empty() && std::all_of(mod.id.begin(), mod.id.end(),
-            [](char c){ return isalnum(c) || c == '-' || c == '_'; });
-        if (!validId) { LOG_WARN("RepoManager: skipping mod with invalid id: %s", mod.id.c_str()); continue; }
-
-        mod.name        = jm["name"].get<std::string>();
-        mod.version     = jm["version"].get<std::string>();
-        mod.download    = jm["download"].get<std::string>();
-        mod.author      = jm.value("author", "Unknown");
-        mod.description = jm.value("description", "");
-        mod.type        = jm.value("type", "mod");
-        mod.thumbnail   = jm.value("thumbnail", "");
-
-        if (jm.contains("includes") && jm["includes"].is_array())
-            for (auto& s : jm["includes"]) mod.includes.push_back(s.get<std::string>());
-        if (jm.contains("screenshots") && jm["screenshots"].is_array())
-            for (auto& s : jm["screenshots"]) mod.screenshots.push_back(s.get<std::string>());
-
-        mod.releaseDate = jm.value("releaseDate", "");
-        mod.changelog   = jm.value("changelog", "");
-        mod.license     = jm.value("license", "");
-        mod.fileSize    = jm.value("fileSize", uint64_t(0));
-
-        if (jm.contains("requirements") && jm["requirements"].is_array())
-            for (auto& s : jm["requirements"]) mod.requirements.push_back(s.get<std::string>());
-        if (jm.contains("tags") && jm["tags"].is_array())
-            for (auto& s : jm["tags"]) mod.tags.push_back(s.get<std::string>());
-
-        if (!RepoManager::validateUrl(mod.download)) {
-            LOG_WARN("RepoManager: skipping mod '%s' - invalid download URL", mod.id.c_str());
-            continue;
-        }
-        game.mods.push_back(std::move(mod));
-    }
-
-    if (game.mods.empty()) return std::nullopt;
-    return game;
 }
+
 
 void RepoManager::parseGame(const std::string& json) {
     try {
