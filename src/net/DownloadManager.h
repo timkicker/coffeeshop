@@ -7,6 +7,7 @@ class DownloadManager {
 public:
     enum class State { Idle, Downloading, Extracting, Done, Error };
 
+    void setCancelFlag(std::atomic<bool>* f) { m_cancelFlag = f; }
     void run(const std::string& zipUrl,
              const std::string& tmpPath,
              const std::string& destDir,
@@ -27,4 +28,5 @@ private:
     std::atomic<State> m_state    { State::Idle };
     std::atomic<float> m_progress { 0.0f };
     std::string        m_error;
+    std::atomic<bool>* m_cancelFlag { nullptr };
 };

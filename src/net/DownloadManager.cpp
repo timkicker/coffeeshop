@@ -44,6 +44,7 @@ static size_t writeFile(char* ptr, size_t size, size_t nmemb, FILE* f) {
 int DownloadManager::curlProgress(void* userdata, curl_off_t total, curl_off_t now,
                                    curl_off_t, curl_off_t) {
     auto* dm = static_cast<DownloadManager*>(userdata);
+    if (dm->m_cancelFlag && dm->m_cancelFlag->load()) return 1;
     if (total > 0)
         dm->m_progress = (float)now / (float)total;
     return 0;

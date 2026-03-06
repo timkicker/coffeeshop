@@ -59,9 +59,11 @@ void DownloadQueue::start() {
 }
 
 void DownloadQueue::stop() {
+    m_cancelDownload = true;
     m_running = false;
     m_cv.notify_all();
     if (m_worker.joinable()) m_worker.join();
+    m_cancelDownload = false;
 }
 
 void DownloadQueue::cleanupFinished() {
@@ -129,6 +131,7 @@ void DownloadQueue::processJob(DownloadJob& job) {
     mkdirp(Paths::cacheDir());
 
     DownloadManager dm;
+    dm.setCancelFlag(&m_cancelDownload);
     dm.run(job.mod.download, tmpPath, destDir);
 
     std::lock_guard<std::mutex> lock(m_mutex);

@@ -10,9 +10,12 @@
 
 #ifdef __WUT__
 #include <sys/iosupport.h>
+#include <nn/ac.h>
+#include <nsysnet/socket.h>
 extern "C" {
     bool WHBMountSdCard();
     bool WHBUnmountSdCard();
+    void socket_lib_finish();
 }
 #endif
 
@@ -59,12 +62,20 @@ int main(int argc, char** argv) {
     }
 
     elog("END");
-    if (g_elog) fclose(g_elog);
 
 #ifdef __WUT__
+    elog("unmounting SD");
     if (Paths::sdMounted) WHBUnmountSdCard();
 #endif
     WHBLogUdpDeinit();
+#ifdef __WUT__
+    elog("socket_lib_finish");
+    socket_lib_finish();
+    elog("ac::Finalize");
+    nn::ac::Finalize();
+#endif
+    elog("WHBProcShutdown");
+    if (g_elog) { fflush(g_elog); fclose(g_elog); g_elog = nullptr; }
     WHBProcShutdown();
     return 0;
 }

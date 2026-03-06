@@ -43,6 +43,7 @@ private:
     std::condition_variable  m_cv;
     std::thread              m_worker;
     std::atomic<bool>        m_running { false };
+    std::atomic<bool>        m_cancelDownload { false };
 
     static constexpr int CLEANUP_SECONDS = 30;
 };
