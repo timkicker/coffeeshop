@@ -3,6 +3,7 @@
 #include "ui/DetailScreen.h"
 #include "ui/DownloadQueueScreen.h"
 #include "net/DownloadQueue.h"
+#include <sysapp/launch.h>
 #include "mods/InstalledScanner.h"
 #include "util/Logger.h"
 #include "app/Paths.h"
@@ -108,8 +109,7 @@ void MainLayout::refreshInstalled() {
 
 void MainLayout::handleInput(const Input& input) {
     if (input.minus) {
-        if (m_fetchThread.joinable()) m_fetchThread.detach();
-        m_app->quit();
+        SYSLaunchMenu();
         return;
     }
     if (m_showOnboarding) {

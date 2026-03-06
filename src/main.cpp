@@ -1,4 +1,5 @@
 #include <whb/proc.h>
+#include <sysapp/launch.h>
 #include <whb/log.h>
 #include "app/App.h"
 #include "app/Paths.h"
@@ -76,6 +77,6 @@ int main(int argc, char** argv) {
 #endif
     elog("WHBProcShutdown");
     if (g_elog) { fflush(g_elog); fclose(g_elog); g_elog = nullptr; }
-    WHBProcShutdown();
+    // WHBProcShutdown() omitted - hangs when loop exits via m_running=false
     return 0;
 }
