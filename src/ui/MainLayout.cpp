@@ -128,7 +128,7 @@ void MainLayout::handleInput(const Input& input) {
     }
     if (input.r) {
         if      (m_activeTab == Tab::Browse)    { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
-        else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Settings;  AudioManager::get().playSound(SoundId::Navigate); }
+        else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Settings;  m_settingsItems = buildSettingsItems(m_config, m_repoStatus); AudioManager::get().playSound(SoundId::Navigate); }
     }
 
     if (m_activeTab == Tab::Browse)    handleBrowseInput(input);
@@ -700,15 +700,8 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
 }
 
 
-// Settings item types
-enum class SItemType { Header, Info, Button };
-struct SItem {
-    SItemType   type;
-    std::string label;
-    std::string value;
-};
 
-static std::vector<SItem> buildSettingsItems(const Config& cfg,
+std::vector<SItem> MainLayout::buildSettingsItems(const Config& cfg,
     const std::map<std::string, std::string>& repoStatus) {
     std::vector<SItem> items;
     auto header = [&](const char* t)                          { items.push_back({SItemType::Header, t, ""}); };
@@ -799,7 +792,7 @@ void MainLayout::handleSettingsInput(const Input& input) {
         return;
     }
 
-    auto items = buildSettingsItems(m_config, m_repoStatus);
+    auto& items = m_settingsItems;
 
     auto selectable = [&](int i) {
         return i >= 0 && i < (int)items.size() && items[i].type != SItemType::Header;
@@ -835,6 +828,7 @@ void MainLayout::handleSettingsInput(const Input& input) {
             }
             ImageCache::get().clear(nullptr);
             LOG_INFO("Settings: image cache cleared");
+            m_settingsItems = buildSettingsItems(m_config, m_repoStatus);
         }
         else if (label == "Clear all cache") {
             std::string dir = Paths::cacheDir();
@@ -847,6 +841,7 @@ void MainLayout::handleSettingsInput(const Input& input) {
             }
             ImageCache::get().clear(nullptr);
             LOG_INFO("Settings: full cache cleared");
+            m_settingsItems = buildSettingsItems(m_config, m_repoStatus);
         }
         else if (label == "View log") {
             m_showLog   = true;
@@ -888,7 +883,7 @@ void MainLayout::renderSettings(SDL_Renderer* renderer) {
         return;
     }
 
-    auto items = buildSettingsItems(m_config, m_repoStatus);
+    auto& items = m_settingsItems;
 
     const int ITEM_H = 32;
     int y = 8;

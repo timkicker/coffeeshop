@@ -13,6 +13,13 @@
 #include <mutex>
 #include <atomic>
 
+enum class SItemType { Header, Info, Button };
+struct SItem {
+    SItemType   type;
+    std::string label;
+    std::string value;
+};
+
 class MainLayout : public Screen {
 public:
     explicit MainLayout(App* app);
@@ -84,6 +91,8 @@ private:
     std::vector<StartupConflict> m_startupConflicts;
 
     // Settings state
+    std::vector<SItem>        m_settingsItems;
+    std::vector<SItem> buildSettingsItems(const Config& cfg, const std::map<std::string,std::string>& repoStatus);
     int                       m_settingsSelected  = 0;
     int                       m_settingsScroll    = 0;
     bool                      m_showLog           = false;
