@@ -17,6 +17,8 @@ public:
     bool init();
     void run();
     void quit();
+    void startExit(); // SYSLaunchMenu + drain loop
+    bool isExiting() const { return m_exiting; }
 
     SDL_Renderer* renderer() const { return m_renderer; }
     SDL_Window*   window()   const { return m_window; }
@@ -36,6 +38,7 @@ private:
     int  m_screenW = 1280;
     int  m_screenH = 720;
     bool m_running = false;
+    bool m_exiting = false;
 
     std::vector<std::unique_ptr<Screen>> m_screens;
 };

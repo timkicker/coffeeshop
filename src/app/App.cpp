@@ -9,11 +9,13 @@ extern void elog(const char* msg);
 #include <cstdarg>
 #include <sys/stat.h>
 #include "net/DownloadQueue.h"
+#include <sysapp/launch.h>
 #include "util/ImageCache.h"
 #include "app/CacheManager.h"
 
 #include <SDL2/SDL.h>
 #include <whb/proc.h>
+#include <proc_ui/procui.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_image.h>
 
@@ -114,6 +116,13 @@ void App::run() {
 
 void App::quit() {
     m_running = false;
+}
+void App::startExit() {
+    m_exiting = true;
+    m_running = false;
+#ifdef __WUT__
+    SYSLaunchMenu();
+#endif
 }
 
 void App::pushScreen(std::unique_ptr<Screen> screen) {
