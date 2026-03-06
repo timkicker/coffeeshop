@@ -18,13 +18,19 @@ public:
 
 private:
     struct Item {
-        std::string label;
-        std::string value;
-        bool        isButton = false;
-        bool        isHeader = false;
+        std::string  label;
+        std::string  value;
+        bool         isButton = false;
+        bool         isHeader = false;
+        SDL_Texture* labelTex = nullptr;
+        SDL_Rect     labelRect{};
+        SDL_Texture* valueTex = nullptr;
+        SDL_Rect     valueRect{};
     };
 
     void buildItems();
+    void buildTextureCache(SDL_Renderer* renderer);
+    void freeItemTextures();
     void renderText(SDL_Renderer* renderer, const std::string& text,
                     int x, int y, SDL_Color color, TTF_Font* font);
 
@@ -32,6 +38,7 @@ private:
     std::vector<Item>    m_items;
     int                  m_selectedIdx  = 0;
     int                  m_scrollOffset = 0;
+    bool                 m_textureCacheDirty = true;
 
     // Log viewer state
     bool                 m_showLog      = false;

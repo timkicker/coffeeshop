@@ -58,6 +58,7 @@ SettingsScreen::SettingsScreen(App* app, const Config& config)
     : Screen(app), m_config(config) {}
 
 SettingsScreen::~SettingsScreen() {
+    freeItemTextures();
     if (m_fontLarge)  TTF_CloseFont(m_fontLarge);
     if (m_fontNormal) TTF_CloseFont(m_fontNormal);
     if (m_fontSmall)  TTF_CloseFont(m_fontSmall);
@@ -75,7 +76,9 @@ void SettingsScreen::onEnter() {
 void SettingsScreen::onExit() {}
 
 void SettingsScreen::buildItems() {
+    freeItemTextures();
     m_items.clear();
+    m_textureCacheDirty = true;
 
     auto header = [&](const std::string& title) {
         Item h; h.label = title; h.isHeader = true;
@@ -212,9 +215,41 @@ void SettingsScreen::handleInput(const Input& input) {
 
 void SettingsScreen::update() {}
 
+
+void SettingsScreen::freeItemTextures() {
+    for (auto& item : m_items) {
+        if (item.labelTex) { SDL_DestroyTexture(item.labelTex); item.labelTex = nullptr; }
+        if (item.valueTex) { SDL_DestroyTexture(item.valueTex); item.valueTex = nullptr; }
+    }
+}
+
+void SettingsScreen::buildTextureCache(SDL_Renderer* renderer) {
+    auto makeTexture = [&](TTF_Font* font, const std::string& text, SDL_Color col, SDL_Texture*& tex, SDL_Rect& rect) {
+        if (!font || text.empty()) return;
+        SDL_Surface* s = TTF_RenderUTF8_Blended(font, text.c_str(), col);
+        if (!s) return;
+        tex = SDL_CreateTextureFromSurface(renderer, s);
+        rect = {0, 0, s->w, s->h};
+        SDL_FreeSurface(s);
+    };
+    for (auto& item : m_items) {
+        if (item.labelTex) { SDL_DestroyTexture(item.labelTex); item.labelTex = nullptr; }
+        if (item.valueTex) { SDL_DestroyTexture(item.valueTex); item.valueTex = nullptr; }
+        if (item.isHeader) {
+            makeTexture(m_fontSmall, item.label, {80,180,255,255}, item.labelTex, item.labelRect);
+        } else {
+            SDL_Color col = item.isButton ? SDL_Color{100,200,120,255} : SDL_Color{210,210,230,255};
+            makeTexture(m_fontSmall, item.label, col, item.labelTex, item.labelRect);
+            if (!item.value.empty())
+                makeTexture(m_fontSmall, item.value, {130,130,160,255}, item.valueTex, item.valueRect);
+        }
+    }
+    m_textureCacheDirty = false;
+}
 void SettingsScreen::render(SDL_Renderer* renderer) {
     const int W = m_app->screenWidth();
     const int H = m_app->screenHeight();
+    if (m_textureCacheDirty) buildTextureCache(renderer);
 
     SDL_SetRenderDrawColor(renderer, 12, 12, 20, 255);
     SDL_Rect bg = {0, 0, W, H};
@@ -302,7 +337,11 @@ void SettingsScreen::render(SDL_Renderer* renderer) {
 
         if (item.isHeader) {
             y += 6;
-            if (m_fontSmall) renderText(renderer, item.label, CX2, y, {80,180,255,255}, m_fontSmall);
+            if (item.labelTex) {
+            SDL_Rect dst = item.labelRect;
+            dst.x = CX2; dst.y = y;
+            SDL_RenderCopy(renderer, item.labelTex, nullptr, &dst);
+        }
             y += 20;
             SDL_SetRenderDrawColor(renderer, 40, 40, 65, 255);
             SDL_RenderDrawLine(renderer, CX2, y, W-20, y);
@@ -323,9 +362,16 @@ void SettingsScreen::render(SDL_Renderer* renderer) {
             ? SDL_Color{100, 200, 120, 255}
             : SDL_Color{210, 210, 230, 255};
 
-        if (m_fontSmall) renderText(renderer, item.label, CX2+4, y+8, labelCol, m_fontSmall);
-        if (!item.value.empty() && m_fontSmall)
-            renderText(renderer, item.value, W/2+40, y+8, {130,130,160,255}, m_fontSmall);
+        if (item.labelTex) {
+            SDL_Rect dst = item.labelRect;
+            dst.x = CX2+4; dst.y = y+8;
+            SDL_RenderCopy(renderer, item.labelTex, nullptr, &dst);
+        }
+        if (item.valueTex) {
+            SDL_Rect dst = item.valueRect;
+            dst.x = W/2+40; dst.y = y+8;
+            SDL_RenderCopy(renderer, item.valueTex, nullptr, &dst);
+        }
 
         y += ITEM_H;
     }
