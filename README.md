@@ -54,6 +54,8 @@
 
 ### Steps
 
+I've also created a [video tutorial on YouTube](https://youtu.be/FF4uRc8NvnI)
+
 1. Download `wiiu_mod_store.wuhb` from the [latest release](https://github.com/timkicker/coffeeshop/releases/latest)
 2. Copy it to `SD:/wiiu/apps/coffeeshop/wiiu_mod_store.wuhb`
 3. Create `SD:/wiiu/apps/coffeeshop/config.json` with the [repos you want to use](#config.json-reference):
