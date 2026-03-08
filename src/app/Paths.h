@@ -21,9 +21,9 @@ namespace Paths {
 
     inline std::string configFile() {
 #if BUILD_HW
-        return modstoreBase() + "/config.json";
+        return modstoreBase() + "/config.json";  // SD card
 #else
-        return "/vol/content/config.json";
+        return "/vol/content/config.json";        // wuhb-embedded (Cemu only)
 #endif
     }
 
