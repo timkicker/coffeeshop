@@ -42,8 +42,8 @@ jobs:
             ## CoffeeShop ${{ github.ref_name }}
 
             ### Installation
-            1. Copy `wiiu_mod_store.wuhb` to `SD:/wiiu/apps/modstore/`
-            2. Create `SD:/wiiu/apps/modstore/config.json` with your repo URLs
+            1. Copy `wiiu_mod_store.wuhb` to `SD:/wiiu/apps/coffeeshop/`
+            2. Create `SD:/wiiu/apps/coffeeshop/config.json` with your repo URLs
             3. Launch via Homebrew Launcher
 
             ### config.json
