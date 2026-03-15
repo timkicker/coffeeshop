@@ -25,7 +25,7 @@ static constexpr int GRID_TOP      = 70;
 MainLayout::MainLayout(App* app) : Screen(app) {}
 
 MainLayout::~MainLayout() {
-    if (m_fetchThread.joinable()) m_fetchThread.join();
+    if (m_fetchThread.joinable()) m_fetchThread.detach();
     if (m_fontNormal) TTF_CloseFont(m_fontNormal);
     if (m_fontSmall)  TTF_CloseFont(m_fontSmall);
     if (m_fontTiny)   TTF_CloseFont(m_fontTiny);
@@ -109,7 +109,8 @@ void MainLayout::refreshInstalled() {
 
 void MainLayout::handleInput(const Input& input) {
     if (input.minus) {
-        SYSLaunchMenu();
+        if (m_fetchThread.joinable()) m_fetchThread.detach();
+        m_app->startExit();
         return;
     }
     if (m_showOnboarding) {

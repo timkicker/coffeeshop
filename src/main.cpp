@@ -48,20 +48,21 @@ int main(int argc, char** argv) {
     elog(Paths::sdMounted ? "SD mounted" : "SD failed");
 
     elog("before App init");
-    App app;
-    elog("App created");
-
-    if (app.init()) {
-        elog("App init OK");
-        AudioManager::get().init();
-        elog("Audio init OK");
-        app.run();
-        elog("run returned");
-        AudioManager::get().shutdown();
-    } else {
-        elog("App init FAILED");
-    }
-
+    {
+        App app;
+        elog("App created");
+        if (app.init()) {
+            elog("App init OK");
+            AudioManager::get().init();
+            elog("Audio init OK");
+            app.run();
+            elog("run returned");
+            AudioManager::get().shutdown();
+        } else {
+            elog("App init FAILED");
+        }
+        elog("app scope end - SDL cleanup follows");
+    } // App destructor runs here: SDL, renderer, window all freed
     elog("END");
 
 #ifdef __WUT__
@@ -77,6 +78,6 @@ int main(int argc, char** argv) {
 #endif
     elog("WHBProcShutdown");
     if (g_elog) { fflush(g_elog); fclose(g_elog); g_elog = nullptr; }
-    // WHBProcShutdown() omitted - hangs when loop exits via m_running=false
+    WHBProcShutdown();
     return 0;
 }

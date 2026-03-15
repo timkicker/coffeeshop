@@ -31,13 +31,23 @@ extern "C" {
 App::App() = default;
 
 App::~App() {
+    elog("~App: DownloadQueue stop");
     DownloadQueue::get().stop();
+    elog("~App: ImageCache clear");
     if (m_renderer) ImageCache::get().clear(m_renderer);
+    elog("~App: DestroyRenderer");
     if (m_renderer) SDL_DestroyRenderer(m_renderer);
+    elog("~App: DestroyWindow");
     if (m_window)   SDL_DestroyWindow(m_window);
+    elog("~App: IMG_Quit");
     IMG_Quit();
+    elog("~App: TTF_Quit");
     TTF_Quit();
+    elog("~App: SDL_Quit");
     SDL_Quit();
+    elog("~App: clearing screens");
+    m_screens.clear();
+    elog("~App: done");
 }
 
 bool App::init() {
@@ -112,6 +122,10 @@ void App::run() {
         update();
         render();
     }
+#ifdef __WUT__
+    // Drain ProcUI until Aroma confirms exit - required for WHBProcShutdown to work
+    while (WHBProcIsRunning()) {}
+#endif
 }
 
 void App::quit() {
