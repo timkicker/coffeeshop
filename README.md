@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/timkicker/coffeeshop/actions">
-    <img alt="Build" src="https://img.shields.io/github/actions/workflow/status/timkicker/coffeeshop/release.yml?label=build&branch=main">
+    <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/timkicker/coffeeshop/release.yml?label=build">
   </a>
   <a href="https://github.com/timkicker/coffeeshop/releases/latest">
     <img alt="Release" src="https://img.shields.io/github/v/release/timkicker/coffeeshop?display_name=tag&sort=semver">
@@ -17,7 +17,7 @@
   <a href="LICENSE">
     <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue.svg">
   </a>
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Wii%20U-lightgrey">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Wii%20U-blue">
 </p>
 
 
