@@ -1,4 +1,5 @@
 #include "RepoManager.h"
+#include <atomic>
 #include "util/Logger.h"
 
 #include <curl/curl.h>
@@ -21,7 +22,12 @@ bool RepoManager::validateUrl(const std::string& url) {
     return true;
 }
 
-static std::string fetchUrl(const std::string& url, std::string& error) {
+struct FetchCancelCtx { std::atomic<bool>* flag; };
+static int fetchProgress(void* ud, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+    auto* ctx = static_cast<FetchCancelCtx*>(ud);
+    return (ctx && ctx->flag && ctx->flag->load()) ? 1 : 0;
+}
+static std::string fetchUrl(const std::string& url, std::string& error, std::atomic<bool>* cancelFlag = nullptr) {
     LOG_INFO("fetchUrl: %s", url.c_str());
     std::string body;
     CURL* curl = curl_easy_init();
@@ -30,12 +36,16 @@ static std::string fetchUrl(const std::string& url, std::string& error) {
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,  writeString);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA,      &body);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT,        30L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT,        5L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL,       1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT,      "WiiUModStore/0.1");
+    FetchCancelCtx ctx{ cancelFlag };
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, fetchProgress);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA,     &ctx);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS,       0L);
     LOG_INFO("calling curl_easy_perform...");
     CURLcode res = curl_easy_perform(curl);
     LOG_INFO("curl returned: %d", res);
@@ -56,7 +66,7 @@ static std::string resolveUrl(const std::string& base, const std::string& path) 
     return base.substr(0, slash + 1) + path;
 }
 
-void RepoManager::fetch(const std::string& url) {
+void RepoManager::fetch(const std::string& url, std::atomic<bool>* cancelFlag) {
     m_lastError.clear();
     m_repo = {};
 
@@ -67,7 +77,7 @@ void RepoManager::fetch(const std::string& url) {
     }
 
     std::string err;
-    std::string body = fetchUrl(url, err);
+    std::string body = fetchUrl(url, err, cancelFlag);
     if (body.empty()) {
         m_lastError = "Network error: " + err;
         LOG_ERROR("RepoManager: %s", m_lastError.c_str());
@@ -101,7 +111,7 @@ void RepoManager::fetch(const std::string& url) {
                 std::string gameUrl  = resolveUrl(url, gamePath);
                 LOG_INFO("RepoManager: fetching game from %s", gameUrl.c_str());
 
-                std::string gameBody = fetchUrl(gameUrl, err);
+                std::string gameBody = fetchUrl(gameUrl, err, cancelFlag);
                 if (gameBody.empty()) {
                     LOG_WARN("RepoManager: failed to fetch %s: %s", gameUrl.c_str(), err.c_str());
                     continue;

@@ -25,10 +25,16 @@ static constexpr int GRID_TOP      = 70;
 MainLayout::MainLayout(App* app) : Screen(app) {}
 
 MainLayout::~MainLayout() {
-    if (m_fetchThread.joinable()) m_fetchThread.detach();
+    elog("~MainLayout: start");
+    m_stopFetch = true;
+    elog("~MainLayout: joining fetchThread");
+    if (m_fetchThread.joinable()) m_fetchThread.join();
+    elog("~MainLayout: join done");
+    elog("~MainLayout: closing fonts");
     if (m_fontNormal) TTF_CloseFont(m_fontNormal);
     if (m_fontSmall)  TTF_CloseFont(m_fontSmall);
     if (m_fontTiny)   TTF_CloseFont(m_fontTiny);
+    elog("~MainLayout: done");
 }
 
 void MainLayout::onEnter() {
@@ -51,7 +57,7 @@ void MainLayout::onEnter() {
                 if (m_stopFetch) break;
                 LOG_INFO("Processing repo: %s", url.c_str());
                 RepoManager rm;
-                rm.fetch(url);
+                rm.fetch(url, &m_stopFetch);
                 {
                     std::lock_guard<std::mutex> sl(m_repoMutex);
                     m_repoStatus[url] = rm.lastError().empty() ? "OK" : rm.lastError();
@@ -68,6 +74,7 @@ void MainLayout::onEnter() {
                 }
             }
 
+            if (m_stopFetch) return;
             std::lock_guard<std::mutex> lock(m_repoMutex);
             LOG_INFO("Fetch loop done, %zu total games", combined.games.size());
             m_repo = combined;

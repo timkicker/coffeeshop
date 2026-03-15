@@ -33,6 +33,8 @@ App::App() = default;
 App::~App() {
     elog("~App: DownloadQueue stop");
     DownloadQueue::get().stop();
+    elog("~App: clearing screens");
+    m_screens.clear();
     elog("~App: ImageCache clear");
     if (m_renderer) ImageCache::get().clear(m_renderer);
     elog("~App: DestroyRenderer");
@@ -45,8 +47,6 @@ App::~App() {
     TTF_Quit();
     elog("~App: SDL_Quit");
     SDL_Quit();
-    elog("~App: clearing screens");
-    m_screens.clear();
     elog("~App: done");
 }
 

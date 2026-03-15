@@ -4,6 +4,7 @@
 #include <optional>
 #include <vector>
 #include <cstdint>
+#include <atomic>
 
 struct Mod {
     std::string id;
@@ -46,7 +47,7 @@ public:
     // Returns false if URL is invalid format
     static bool validateUrl(const std::string& url);
 
-    void fetch(const std::string& url);
+    void fetch(const std::string& url, std::atomic<bool>* cancelFlag = nullptr);
 
     const Repo&        repo()      const { return m_repo; }
     const std::string& lastError() const { return m_lastError; }
