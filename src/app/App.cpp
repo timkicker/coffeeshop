@@ -108,6 +108,7 @@ bool App::init() {
     CacheManager::cleanupStaleZips();
     CacheManager::cleanupCorruptMods();
     DownloadQueue::get().start();
+    ImageCache::get().start();
 
     return true;
 }

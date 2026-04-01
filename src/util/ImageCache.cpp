@@ -26,16 +26,50 @@ static std::string cacheFile(const std::string& url) {
     return Paths::cacheDir() + "/images/" + std::string(buf) + ".img";
 }
 
-void ImageCache::request(const std::string& url) {
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        auto it = m_cache.find(url);
-        if (it != m_cache.end()) return; // already queued or done
-        m_cache[url].state = State::Loading;
-    }
+void ImageCache::start() {
+    if (m_running.exchange(true)) return; // already started
+    m_worker = std::thread(&ImageCache::workerLoop, this);
+}
 
-    // Fire and forget thread
-    std::thread([this, url]() { download(url); }).detach();
+void ImageCache::stop() {
+    if (!m_running.exchange(false)) return; // already stopped
+    m_cv.notify_all();
+    if (m_worker.joinable()) m_worker.join();
+}
+
+void ImageCache::request(const std::string& url) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto it = m_cache.find(url);
+    if (it != m_cache.end()) return; // already queued or done
+    m_cache[url].state = State::Loading;
+    m_queue.push(url);
+    m_cv.notify_one();
+}
+
+void ImageCache::workerLoop() {
+    while (m_running) {
+        std::string url;
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            // Poll instead of cv wait (more reliable on WUT)
+            lock.unlock();
+            for (int i = 0; i < 50 && m_running; i++) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::lock_guard<std::mutex> pl(m_mutex);
+                if (!m_queue.empty()) goto done_waiting;
+            }
+            done_waiting:
+            lock.lock();
+
+            if (!m_running) break;
+            if (m_queue.empty()) continue;
+
+            url = m_queue.front();
+            m_queue.pop();
+        }
+
+        download(url);
+    }
 }
 
 void ImageCache::download(const std::string& url) {
@@ -135,6 +169,7 @@ SDL_Texture* ImageCache::texture(const std::string& url, SDL_Renderer* renderer)
 }
 
 void ImageCache::clear(SDL_Renderer* renderer) {
+    stop();
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& pair : m_cache) {
         if (pair.second.tex)

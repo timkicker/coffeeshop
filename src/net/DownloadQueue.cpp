@@ -54,16 +54,34 @@ int DownloadQueue::activeCount() {
 }
 
 void DownloadQueue::start() {
-    m_running = true;
-    m_worker  = std::thread(&DownloadQueue::workerLoop, this);
+    if (m_running.exchange(true)) return; // already started
+    m_worker = std::thread(&DownloadQueue::workerLoop, this);
 }
 
 void DownloadQueue::stop() {
-    m_cancelDownload = true;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        for (auto& j : m_jobs) j.cancel = true;
+    }
     m_running = false;
     m_cv.notify_all();
     if (m_worker.joinable()) m_worker.join();
-    m_cancelDownload = false;
+}
+
+void DownloadQueue::cancelJob(int index) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (index >= 0 && index < (int)m_jobs.size()) {
+        auto& j = m_jobs[index];
+        if (j.state == DownloadJob::State::Pending) {
+            j.state        = DownloadJob::State::Error;
+            j.error        = "Cancelled";
+            j.hasFinishedAt = true;
+            j.finishedAt   = std::chrono::steady_clock::now();
+        } else if (j.state == DownloadJob::State::Downloading ||
+                   j.state == DownloadJob::State::Extracting) {
+            j.cancel = true;
+        }
+    }
 }
 
 void DownloadQueue::cleanupFinished() {
@@ -120,31 +138,48 @@ void DownloadQueue::workerLoop() {
 
         if (pendingIdx < 0) continue;
 
-        processJob(m_jobs[pendingIdx]);
+        // Copy input data while locked; cancel flag stays in the vector
+        // entry (safe: only Error jobs are erased, and ours is Downloading).
+        Mod jobMod;
+        std::string jobTitleId;
+        std::atomic<bool>* jobCancel = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            jobMod     = m_jobs[pendingIdx].mod;
+            jobTitleId = m_jobs[pendingIdx].titleId;
+            jobCancel  = &m_jobs[pendingIdx].cancel;
+        }
+
+        processJob(pendingIdx, jobMod, jobTitleId, jobCancel);
     }
 }
 
-void DownloadQueue::processJob(DownloadJob& job) {
-    std::string tmpPath = Paths::cacheDir() + "/" + job.mod.id + ".zip";
-    std::string destDir = Paths::sdcafiineBase() + "/" + job.titleId + "/" + job.mod.id;
+void DownloadQueue::processJob(int idx, const Mod& mod,
+                                const std::string& titleId,
+                                std::atomic<bool>* cancelFlag) {
+    std::string tmpPath = Paths::cacheDir() + "/" + mod.id + ".zip";
+    std::string destDir = Paths::sdcafiineBase() + "/" + titleId + "/" + mod.id;
 
     mkdirp(Paths::cacheDir());
 
     DownloadManager dm;
-    dm.setCancelFlag(&m_cancelDownload);
-    dm.run(job.mod.download, tmpPath, destDir);
+    dm.setCancelFlag(cancelFlag);
+    dm.run(mod.download, tmpPath, destDir);
 
     std::lock_guard<std::mutex> lock(m_mutex);
+    if (idx < 0 || idx >= (int)m_jobs.size()) return;
+
+    auto& job = m_jobs[idx];
     if (dm.state() == DownloadManager::State::Done) {
-        writeModInfo(destDir, job.mod);
+        writeModInfo(destDir, mod);
         job.state        = DownloadJob::State::Done;
         job.progress     = 1.0f;
         job.hasFinishedAt = true;
         job.finishedAt   = std::chrono::steady_clock::now();
-        LOG_INFO("DownloadQueue: done: %s", job.mod.name.c_str());
+        LOG_INFO("DownloadQueue: done: %s", mod.name.c_str());
     } else {
         job.state        = DownloadJob::State::Error;
-        job.error        = dm.error();
+        job.error        = cancelFlag->load() ? "Cancelled" : dm.error();
         job.hasFinishedAt = true;
         job.finishedAt   = std::chrono::steady_clock::now();
         LOG_ERROR("DownloadQueue: error: %s", job.error.c_str());

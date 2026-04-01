@@ -26,15 +26,23 @@ static void mkdirp(const std::string& path) {
 }
 
 static bool rmrf(const std::string& path) {
-    // Simple recursive delete for cleanup on failed extract
     struct stat st;
     if (stat(path.c_str(), &st) != 0) return true;
-    if (!S_ISDIR(st.st_mode)) { remove(path.c_str()); return true; }
-    // For directories: use system rm -rf equivalent via posix
-    // On WUT we don't have system(), so just remove the dir itself
-    // ZipExtractor creates flat structure so this is usually enough
-    rmdir(path.c_str());
-    return true;
+    if (!S_ISDIR(st.st_mode)) return remove(path.c_str()) == 0;
+
+    DIR* d = opendir(path.c_str());
+    if (!d) return false;
+
+    bool ok = true;
+    struct dirent* e;
+    while ((e = readdir(d)) != nullptr) {
+        std::string name = e->d_name;
+        if (name == "." || name == "..") continue;
+        if (!rmrf(path + "/" + name)) ok = false;
+    }
+    closedir(d);
+    if (rmdir(path.c_str()) != 0) ok = false;
+    return ok;
 }
 
 static size_t writeFile(char* ptr, size_t size, size_t nmemb, FILE* f) {
@@ -78,7 +86,7 @@ bool DownloadManager::validateZip(const std::string& path) {
 
     // Check ZIP magic bytes
     uint8_t magic[4];
-    fread(magic, 1, 4, f);
+    if (fread(magic, 1, 4, f) != 4) { fclose(f); return false; }
     fclose(f);
 
     uint32_t sig = magic[0] | (magic[1]<<8) | (magic[2]<<16) | (magic[3]<<24);
@@ -111,11 +119,10 @@ bool DownloadManager::download(const std::string& zipUrl, const std::string& tmp
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,    writeFile);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA,        f);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,   1L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT,          120L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT,   15L);
-    // Abort if below 1KB/s for 30 seconds
-    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT,  1024L);
-    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME,   30L);
+    // Abort if below 100 bytes/s for 60 seconds
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT,  100L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME,   60L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,   0L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,   0L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT,        "WiiUModStore/0.1");

@@ -16,12 +16,16 @@ static constexpr uint32_t DATA_DESC_SIG    = 0x08074b50;
 static constexpr uint32_t CENTRAL_DIR_SIG  = 0x02014b50;
 static constexpr uint32_t END_CENTRAL_SIG  = 0x06054b50;
 
+static bool s_readError = false;
+
 static uint16_t read16(FILE* f) {
-    uint8_t b[2]; fread(b, 1, 2, f);
+    uint8_t b[2];
+    if (fread(b, 1, 2, f) != 2) { s_readError = true; return 0; }
     return (uint16_t)(b[0] | (b[1] << 8));
 }
 static uint32_t read32(FILE* f) {
-    uint8_t b[4]; fread(b, 1, 4, f);
+    uint8_t b[4];
+    if (fread(b, 1, 4, f) != 4) { s_readError = true; return 0; }
     return (uint32_t)(b[0] | (b[1]<<8) | (b[2]<<16) | (b[3]<<24));
 }
 
@@ -47,10 +51,11 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
     ensureDir(destDir);
 
     bool ok = true;
+    s_readError = false;
 
     while (true) {
         uint32_t sig = read32(f);
-        if (feof(f)) break;
+        if (s_readError || feof(f)) break;
 
         if (sig == CENTRAL_DIR_SIG || sig == END_CENTRAL_SIG) break;
 
@@ -72,9 +77,31 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
         uint16_t nameLen    = read16(f);
         uint16_t extraLen   = read16(f);
 
+        if (s_readError) {
+            LOG_ERROR("ZipExtractor: read error in local file header");
+            ok = false;
+            break;
+        }
+
+        if (nameLen > 4096) {
+            LOG_ERROR("ZipExtractor: entry name too long (%u bytes)", nameLen);
+            ok = false;
+            break;
+        }
+
         std::string name(nameLen, '\0');
-        fread(&name[0], 1, nameLen, f);
+        if (fread(&name[0], 1, nameLen, f) != nameLen) {
+            LOG_ERROR("ZipExtractor: short read on entry name");
+            ok = false;
+            break;
+        }
         fseek(f, extraLen, SEEK_CUR);
+
+        if (name.find("..") != std::string::npos) {
+            LOG_ERROR("ZipExtractor: path traversal blocked: %s", name.c_str());
+            ok = false;
+            break;
+        }
 
         bool isDir = (!name.empty() && name.back() == '/');
         std::string outPath = destDir + "/" + name;
@@ -87,6 +114,7 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
                 if (maybeS == DATA_DESC_SIG) { read32(f); read32(f); read32(f); }
                 else { read32(f); read32(f); }
             }
+            if (s_readError) { ok = false; break; }
             continue;
         }
 
@@ -106,8 +134,13 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
         if (method == 0) {
             // Stored
             std::vector<uint8_t> buf(compSize);
-            fread(buf.data(), 1, compSize, f);
-            fwrite(buf.data(), 1, compSize, out);
+            if (fread(buf.data(), 1, compSize, f) != compSize) {
+                LOG_ERROR("ZipExtractor: short read on stored entry %s", name.c_str());
+                ok = false;
+            } else if (fwrite(buf.data(), 1, compSize, out) != compSize) {
+                LOG_ERROR("ZipExtractor: write failed for %s", name.c_str());
+                ok = false;
+            }
 
         } else if (method == 8) {
             // Deflated
@@ -120,7 +153,11 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
 
             while (remaining > 0) {
                 uint32_t toRead = std::min((uint32_t)inBuf.size(), remaining);
-                fread(inBuf.data(), 1, toRead, f);
+                if (fread(inBuf.data(), 1, toRead, f) != toRead) {
+                    LOG_ERROR("ZipExtractor: short read on deflated entry %s", name.c_str());
+                    ok = false;
+                    break;
+                }
                 remaining -= toRead;
 
                 zs.next_in  = inBuf.data();
@@ -136,7 +173,11 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
                         break;
                     }
                     uint32_t produced = (uint32_t)outBuf.size() - zs.avail_out;
-                    fwrite(outBuf.data(), 1, produced, out);
+                    if (produced > 0 && fwrite(outBuf.data(), 1, produced, out) != produced) {
+                        LOG_ERROR("ZipExtractor: write failed for %s", name.c_str());
+                        ok = false;
+                        break;
+                    }
                 } while (zs.avail_out == 0);
 
                 if (!ok) break;
@@ -155,6 +196,7 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
             if (maybeS == DATA_DESC_SIG) { read32(f); read32(f); read32(f); }
             else { read32(f); read32(f); }
         }
+        if (s_readError) { ok = false; break; }
     }
 
     fclose(f);
