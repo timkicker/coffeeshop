@@ -35,6 +35,14 @@ void DownloadQueueScreen::handleInput(const Input& input) {
         return;
     }
 
+    if (input.x && !jobs.empty() && m_selectedIdx < (int)jobs.size()) {
+        auto state = jobs[m_selectedIdx].state;
+        if (state == DownloadJob::State::Pending ||
+            state == DownloadJob::State::Downloading) {
+            DownloadQueue::get().cancelJob(m_selectedIdx);
+        }
+    }
+
     if (input.up)   m_selectedIdx = std::max(0, m_selectedIdx - 1);
     if (input.down) m_selectedIdx = std::min((int)jobs.size() - 1, m_selectedIdx + 1);
 }
@@ -124,10 +132,17 @@ void DownloadQueueScreen::render(SDL_Renderer* renderer) {
 
     // Bottom hint
     if (m_fontSmall) {
-        bool errorSelected = !jobs.empty() && m_selectedIdx < (int)jobs.size() &&
-                             jobs[m_selectedIdx].state == DownloadJob::State::Error;
-        std::string hint = errorSelected ? "B: Dismiss error   Up/Down: navigate" : "B: Back   Up/Down: navigate";
-        renderText(renderer, hint, W/2 - 160, H - 35, grey, m_fontSmall);
+        std::string hint = "B: Back   Up/Down: navigate";
+        if (!jobs.empty() && m_selectedIdx < (int)jobs.size()) {
+            auto selState = jobs[m_selectedIdx].state;
+            if (selState == DownloadJob::State::Error) {
+                hint = "B: Dismiss error   Up/Down: navigate";
+            } else if (selState == DownloadJob::State::Pending ||
+                       selState == DownloadJob::State::Downloading) {
+                hint = "X: Cancel   B: Back   Up/Down: navigate";
+            }
+        }
+        renderText(renderer, hint, W/2 - 180, H - 35, grey, m_fontSmall);
     }
 }
 

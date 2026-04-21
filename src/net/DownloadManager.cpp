@@ -172,6 +172,7 @@ void DownloadManager::run(const std::string& zipUrl,
     // Download with retry
     bool downloaded = false;
     for (int attempt = 1; attempt <= maxRetries + 1; attempt++) {
+        if (m_cancelFlag && m_cancelFlag->load()) break;
         m_progress = 0.0f;
         LOG_INFO("DownloadManager: attempt %d/%d: %s", attempt, maxRetries+1, zipUrl.c_str());
         if (download(zipUrl, tmpPath)) { downloaded = true; break; }
