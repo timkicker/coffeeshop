@@ -53,6 +53,9 @@ public:
     void dismissError(int index); // Remove error job at index
     void start();
     void stop();
+#ifdef CUPSTORE_TESTS
+    void _testReset(); // Clears all jobs - test-only
+#endif
 
 private:
     DownloadQueue() = default;

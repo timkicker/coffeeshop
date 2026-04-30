@@ -11,5 +11,9 @@ struct Config {
     bool load();
     bool save();
 
+    // Path-parameterized overloads (used by tests, but also available in prod)
+    bool loadFrom(const std::string& path);
+    bool saveTo(const std::string& path);
+
     static std::string configPath() { return Paths::configFile(); }
 };

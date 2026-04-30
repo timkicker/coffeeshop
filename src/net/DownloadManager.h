@@ -17,10 +17,13 @@ public:
     float       progress() const { return m_progress.load(); }
     std::string error()    const { return m_error; }
 
+    // Public utilities (also used by tests)
+    static bool validateZip(const std::string& path);
+    static bool checkDiskSpace(const std::string& dir, uint64_t needed);
+    static bool rmrf(const std::string& path);
+
 private:
     bool download(const std::string& zipUrl, const std::string& tmpPath);
-    bool validateZip(const std::string& path);
-    bool checkDiskSpace(const std::string& dir, uint64_t needed);
 
     static int curlProgress(void* userdata, curl_off_t total, curl_off_t now,
                             curl_off_t, curl_off_t);

@@ -25,7 +25,7 @@ static void mkdirp(const std::string& path) {
     }
 }
 
-static bool rmrf(const std::string& path) {
+bool DownloadManager::rmrf(const std::string& path) {
     struct stat st;
     if (stat(path.c_str(), &st) != 0) return true;
     if (!S_ISDIR(st.st_mode)) return remove(path.c_str()) == 0;

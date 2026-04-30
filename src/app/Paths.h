@@ -6,8 +6,14 @@
 // In Cemu: use /vol/external01/ as SD card equivalent.
 namespace Paths {
     extern bool sdMounted;
+#ifdef CUPSTORE_TESTS
+    extern std::string testRootOverride;
+#endif
 
     inline std::string sdRoot() {
+#ifdef CUPSTORE_TESTS
+        if (!testRootOverride.empty()) return testRootOverride;
+#endif
         return sdMounted ? "fs:/vol/external01" : "/vol/external01";
     }
 

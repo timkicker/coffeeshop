@@ -106,6 +106,13 @@ void DownloadQueue::dismissError(int index) {
         m_jobs.erase(m_jobs.begin() + index);
 }
 
+#ifdef CUPSTORE_TESTS
+void DownloadQueue::_testReset() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_jobs.clear();
+}
+#endif
+
 void DownloadQueue::workerLoop() {
     while (m_running) {
         int pendingIdx = -1;

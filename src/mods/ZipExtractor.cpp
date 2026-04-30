@@ -3,6 +3,7 @@
 
 #include <zlib.h>
 #include <cstdio>
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <vector>
