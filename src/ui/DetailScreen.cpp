@@ -1,6 +1,7 @@
 #include "DetailScreen.h"
 #include "ui/RegionSelectScreen.h"
 #include "mods/InstallHelper.h"
+#include "util/TextCache.h"
 #include "mods/InstallChecker.h"
 #include "mods/InstalledScanner.h"
 #include "net/DownloadQueue.h"
@@ -295,15 +296,12 @@ void DetailScreen::render(SDL_Renderer* renderer) {
 void DetailScreen::renderText(SDL_Renderer* renderer, const std::string& text,
                                int x, int y, SDL_Color color, TTF_Font* font) {
     if (!font || text.empty()) return;
-    SDL_Surface* s = TTF_RenderUTF8_Blended(font, text.c_str(), color);
-    if (!s) return;
-    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
-    if (t) {
-        SDL_Rect dst = {x, y, s->w, s->h};
-        SDL_RenderCopy(renderer, t, nullptr, &dst);
-        SDL_DestroyTexture(t);
-    }
-    SDL_FreeSurface(s);
+    SDL_Texture* t = TextCache::get().texture(renderer, font, color, text);
+    if (!t) return;
+    int w = 0, h = 0;
+    TextCache::get().sizeOf(t, &w, &h);
+    SDL_Rect dst = {x, y, w, h};
+    SDL_RenderCopy(renderer, t, nullptr, &dst);
 }
 
 void DetailScreen::renderWrappedText(SDL_Renderer* renderer, const std::string& text,

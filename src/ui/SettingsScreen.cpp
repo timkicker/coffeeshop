@@ -2,6 +2,7 @@
 #include "app/App.h"
 #include "app/Paths.h"
 #include "util/Logger.h"
+#include "util/TextCache.h"
 #include "mods/InstalledScanner.h"
 #include "net/DownloadQueue.h"
 #include "util/ImageCache.h"
@@ -388,13 +389,10 @@ void SettingsScreen::render(SDL_Renderer* renderer) {
 void SettingsScreen::renderText(SDL_Renderer* renderer, const std::string& text,
                                  int x, int y, SDL_Color color, TTF_Font* font) {
     if (!font || text.empty()) return;
-    SDL_Surface* s = TTF_RenderUTF8_Blended(font, text.c_str(), color);
-    if (!s) return;
-    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
-    if (t) {
-        SDL_Rect dst = {x, y, s->w, s->h};
-        SDL_RenderCopy(renderer, t, nullptr, &dst);
-        SDL_DestroyTexture(t);
-    }
-    SDL_FreeSurface(s);
+    SDL_Texture* t = TextCache::get().texture(renderer, font, color, text);
+    if (!t) return;
+    int w = 0, h = 0;
+    TextCache::get().sizeOf(t, &w, &h);
+    SDL_Rect dst = {x, y, w, h};
+    SDL_RenderCopy(renderer, t, nullptr, &dst);
 }

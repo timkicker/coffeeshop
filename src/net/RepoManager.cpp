@@ -6,10 +6,16 @@
 #include <json.hpp>
 #include <sstream>
 #include <algorithm>
+#include <cctype>
+
+// Same cap as HttpClient -- protect against runaway repo responses.
+static constexpr size_t kRepoBodyMax = 10 * 1024 * 1024;
 
 static size_t writeString(char* ptr, size_t size, size_t nmemb, std::string* s) {
-    s->append(ptr, size * nmemb);
-    return size * nmemb;
+    size_t add = size * nmemb;
+    if (s->size() + add > kRepoBodyMax) return 0; // abort: body too large
+    s->append(ptr, add);
+    return add;
 }
 
 bool RepoManager::validateUrl(const std::string& url) {
@@ -105,8 +111,18 @@ void RepoManager::fetch(const std::string& url, std::atomic<bool>* cancelFlag) {
             return;
         }
 
+        int totalGames    = 0;
+        int fetchFailures = 0;
+        std::string firstFetchError;
+
         for (auto& jg : j["games"]) {
+            totalGames++;
             if (jg.contains("path")) {
+                if (!jg["path"].is_string()) {
+                    LOG_WARN("RepoManager: skipping game with non-string path field");
+                    fetchFailures++;
+                    continue;
+                }
                 std::string gamePath = jg["path"].get<std::string>();
                 std::string gameUrl  = resolveUrl(url, gamePath);
                 LOG_INFO("RepoManager: fetching game from %s", gameUrl.c_str());
@@ -114,6 +130,8 @@ void RepoManager::fetch(const std::string& url, std::atomic<bool>* cancelFlag) {
                 std::string gameBody = fetchUrl(gameUrl, err, cancelFlag);
                 if (gameBody.empty()) {
                     LOG_WARN("RepoManager: failed to fetch %s: %s", gameUrl.c_str(), err.c_str());
+                    fetchFailures++;
+                    if (firstFetchError.empty()) firstFetchError = err;
                     continue;
                 }
                 parseGame(gameBody);
@@ -121,14 +139,22 @@ void RepoManager::fetch(const std::string& url, std::atomic<bool>* cancelFlag) {
                 parseGame(jg.dump());
             }
         }
+
+        if (m_repo.games.empty()) {
+            if (totalGames == 0) {
+                m_lastError = "Repo lists no games";
+            } else if (fetchFailures == totalGames) {
+                m_lastError = "All " + std::to_string(totalGames)
+                            + " game fetches failed: " + firstFetchError;
+            } else {
+                m_lastError = "Repo contains no valid mods";
+            }
+        }
     } catch (const nlohmann::json::exception& e) {
         m_lastError = std::string("JSON error: ") + e.what();
         LOG_ERROR("RepoManager: %s", m_lastError.c_str());
         return;
     }
-
-    if (m_repo.games.empty())
-        m_lastError = "Repo contains no valid mods";
 }
 
 std::optional<Game> RepoManager::parseGameFromJson(const std::string& json) {

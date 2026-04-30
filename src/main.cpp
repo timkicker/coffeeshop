@@ -20,16 +20,31 @@ extern "C" {
 }
 #endif
 
-static FILE* g_elog = nullptr;
+static const char* g_elog_path = nullptr;
 void elog(const char* msg) {
-    if (g_elog) { 
-        fprintf(g_elog, "%s\n", msg); 
-        fflush(g_elog);
-        fsync(fileno(g_elog));
+    // Always send via WHBLog so udplogserver picks it up.
+    WHBLogPrintf("[elog] %s", msg);
+    // On Cemu, FILE buffers don't reliably reach the host before kill, even
+    // with fflush+fsync. Reopen+append+close per call is slower but durable.
+    if (g_elog_path) {
+        FILE* f = fopen(g_elog_path, "a");
+        if (f) {
+            fprintf(f, "%s\n", msg);
+            fclose(f);
+        }
     }
 }
 
 int main(int argc, char** argv) {
+    // Diagnostic: prove main() was called before ANY WHB/SDL init.
+    {
+        FILE* probe = fopen("/vol/external01/wiiu/apps/coffeeshop/main_called.txt", "w");
+        if (probe) {
+            fprintf(probe, "main reached\n");
+            fclose(probe);
+        }
+    }
+
     WHBProcInit();
     WHBLogUdpInit();
 
@@ -43,7 +58,21 @@ int main(int argc, char** argv) {
     Paths::sdMounted = false;
 #endif
 
-    g_elog = fopen("fs:/vol/external01/wiiu/apps/coffeeshop/early.log", "w");
+    // On hardware the SD mounts at "fs:/vol/external01/..." (Aroma WHB mount).
+    // In Cemu the prefix is invalid -- pick whichever opens.
+    {
+        FILE* probe = fopen("fs:/vol/external01/wiiu/apps/coffeeshop/early.log", "w");
+        if (probe) {
+            fclose(probe);
+            g_elog_path = "fs:/vol/external01/wiiu/apps/coffeeshop/early.log";
+        } else {
+            probe = fopen("/vol/external01/wiiu/apps/coffeeshop/early.log", "w");
+            if (probe) {
+                fclose(probe);
+                g_elog_path = "/vol/external01/wiiu/apps/coffeeshop/early.log";
+            }
+        }
+    }
     elog("START");
     elog(Paths::sdMounted ? "SD mounted" : "SD failed");
 
@@ -76,8 +105,8 @@ int main(int argc, char** argv) {
     elog("ac::Finalize");
     nn::ac::Finalize();
 #endif
-    elog("WHBProcShutdown");
-    if (g_elog) { fflush(g_elog); fclose(g_elog); g_elog = nullptr; }
-    WHBProcShutdown();
+    // elog uses open+write+close per call; nothing to fclose at exit.
+    // WHBProcShutdown intentionally omitted (CLAUDE.md): App::run drains
+    // ProcUI and SYSLaunchMenu hands control back to the OS.
     return 0;
 }

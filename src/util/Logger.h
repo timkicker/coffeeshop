@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdio>
 #include <cstdarg>
+#include <mutex>
 #include <string>
 #include <vector>
 #include <unistd.h>
@@ -10,6 +11,7 @@ public:
     static Logger& get() { static Logger l; return l; }
 
     void init(const std::string& path) {
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (m_file) fclose(m_file);
         m_file = fopen(path.c_str(), "w");
         if (m_file) {
@@ -20,6 +22,7 @@ public:
     }
 
     void log(const char* level, const char* fmt, va_list args) {
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (!m_file) return;
         fprintf(m_file, "[%s] ", level);
         vfprintf(m_file, fmt, args);
@@ -38,11 +41,15 @@ public:
         return p;
     }
 
-    ~Logger() { if (m_file) fclose(m_file); }
+    ~Logger() {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_file) fclose(m_file);
+    }
 
 private:
     Logger() = default;
-    FILE* m_file = nullptr;
+    FILE*      m_file = nullptr;
+    std::mutex m_mutex;
 };
 
 inline void _log(const char* level, const char* fmt, ...) {

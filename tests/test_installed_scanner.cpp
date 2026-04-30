@@ -257,7 +257,7 @@ TEST_CASE("InstalledScanner::setActive - missing source returns false", "[active
 TEST_CASE("InstalledScanner::setActive - creates target titleId folder if missing", "[active]") {
     Fixture fx;
     fx.installActive("0005000010101000", "my-mod", "1.0");
-    // Disabled base titleId folder doesn't exist yet — setActive must create it
+    // Disabled base titleId folder doesn't exist yet -- setActive must create it
 
     auto mods = InstalledScanner::scan();
     InstalledMod mod = mods[0];
@@ -327,4 +327,61 @@ TEST_CASE("InstalledScanner::remove - missing path returns true (no-op)", "[remo
     mod.path = "/tmp/this_path_xyz_does_not_exist_123";
     // remove() returns rmrf which returns true for missing paths
     REQUIRE(InstalledScanner::remove(mod));
+}
+
+// ─── Phase 5: rmrf hardening ──────────────────────────────────────────────
+
+TEST_CASE("InstalledScanner::remove - symlink loop does not hang", "[remove][security]") {
+    Fixture fx;
+    std::string dir = Paths::sdcafiineBase() + "/0005000010101000/loopy";
+    mkdirs(dir);
+    writeFile(dir + "/modinfo.json", "{}");
+    // Create symlink: dir/self -> dir (potential infinite loop without lstat)
+    REQUIRE(symlink(dir.c_str(), (dir + "/self").c_str()) == 0);
+
+    InstalledMod mod;
+    mod.path = dir;
+
+    // Should complete in reasonable time and clean up the directory
+    REQUIRE(InstalledScanner::remove(mod));
+    REQUIRE_FALSE(exists(dir));
+}
+
+TEST_CASE("InstalledScanner::remove - deep nesting handled up to depth limit",
+          "[remove]") {
+    Fixture fx;
+    // Build moderately deep tree (10 levels) - well below cap (64)
+    std::string base = Paths::sdcafiineBase() + "/0005000010101000/deep";
+    std::string current = base;
+    for (int i = 0; i < 10; i++) {
+        mkdirs(current);
+        writeFile(current + "/file.txt", "x");
+        current += "/sub";
+    }
+
+    InstalledMod mod;
+    mod.path = base;
+    REQUIRE(InstalledScanner::remove(mod));
+    REQUIRE_FALSE(exists(base));
+}
+
+TEST_CASE("InstalledScanner::setActive - stale target folder is cleared",
+          "[active]") {
+    Fixture fx;
+    fx.installActive("0005000010101000", "my-mod", "1.0");
+    // Pre-create a stale disabled/<titleId>/<modId> dir to simulate a
+    // previous failed deactivation
+    std::string staleDst = Paths::disabledBase() + "/0005000010101000/my-mod";
+    mkdirs(staleDst);
+    writeFile(staleDst + "/old_file.txt", "stale");
+    REQUIRE(exists(staleDst + "/old_file.txt"));
+
+    auto mods = InstalledScanner::scan();
+    InstalledMod mod = mods[0]; // active one
+    REQUIRE(mod.active);
+
+    REQUIRE(InstalledScanner::setActive(mod, false));
+    // Stale target was cleared, fresh content is now there
+    REQUIRE(exists(staleDst + "/modinfo.json"));
+    REQUIRE_FALSE(exists(staleDst + "/old_file.txt"));
 }

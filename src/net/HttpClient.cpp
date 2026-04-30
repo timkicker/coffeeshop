@@ -3,6 +3,11 @@
 #include "util/Logger.h"
 #include <curl/curl.h>
 
+// 10 MB cap -- JSON repos and game.json files are kilobytes; anything larger
+// is almost certainly a misconfigured server or a malicious response, and we
+// must not let it grow std::string into OOM territory on the Wii U.
+static constexpr size_t kHttpBodyMax = 10 * 1024 * 1024;
+
 struct CancelCtx { std::atomic<bool>* flag; };
 
 static int progressCallback(void* userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
@@ -12,8 +17,13 @@ static int progressCallback(void* userdata, curl_off_t, curl_off_t, curl_off_t, 
 }
 
 static size_t writeCallback(void* ptr, size_t size, size_t nmemb, std::string* data) {
-    data->append((char*)ptr, size * nmemb);
-    return size * nmemb;
+    size_t add = size * nmemb;
+    if (data->size() + add > kHttpBodyMax) {
+        // Returning != add aborts curl with CURLE_WRITE_ERROR
+        return 0;
+    }
+    data->append((char*)ptr, add);
+    return add;
 }
 
 bool HttpClient::get(const std::string& url, std::string& result,
@@ -44,14 +54,21 @@ bool HttpClient::get(const std::string& url, std::string& result,
     LOG_INFO("curl_easy_perform starting...");
     CURLcode res = curl_easy_perform(curl);
     LOG_INFO("curl_easy_perform returned: %d", res);
-    
+
+    long httpCode = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
     curl_easy_cleanup(curl);
-    
+
     if (res != CURLE_OK) {
         LOG_ERROR("curl error: %s", curl_easy_strerror(res));
         return false;
     }
-    
+    if (httpCode >= 400) {
+        LOG_ERROR("HTTP error %ld for %s", httpCode, url.c_str());
+        result.clear();
+        return false;
+    }
+
     LOG_INFO("HTTP GET success, %zu bytes", result.size());
     return true;
 }

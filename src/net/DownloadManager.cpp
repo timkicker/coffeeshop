@@ -46,7 +46,14 @@ bool DownloadManager::rmrf(const std::string& path) {
 }
 
 static size_t writeFile(char* ptr, size_t size, size_t nmemb, FILE* f) {
-    return fwrite(ptr, size, nmemb, f);
+    size_t written = fwrite(ptr, size, nmemb, f);
+    if (written != nmemb) {
+        // Short write: I/O error (likely SD full or unmounted). curl will see
+        // the mismatch and abort with CURLE_WRITE_ERROR.
+        LOG_ERROR("DownloadManager: short write %zu/%zu (errno=%d)",
+                  written, nmemb, ferror(f) ? ferror(f) : 0);
+    }
+    return written;
 }
 
 int DownloadManager::curlProgress(void* userdata, curl_off_t total, curl_off_t now,

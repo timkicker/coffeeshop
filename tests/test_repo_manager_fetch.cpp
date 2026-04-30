@@ -206,6 +206,53 @@ TEST_CASE("RepoManager::fetch - empty games array reports no valid mods", "[fetc
     REQUIRE(rm.repo().games.empty());
 }
 
+TEST_CASE("RepoManager::fetch - non-string path field is skipped", "[fetch]") {
+    CurlMock::reset();
+    // path is a number, not a string -- used to throw nlohmann::json::exception
+    CurlMock::setResponse("https://repo.example.com/repo.json", R"({
+        "games": [{ "path": 42 }]
+    })");
+
+    RepoManager rm;
+    rm.fetch("https://repo.example.com/repo.json");
+
+    // Should not crash; should report no valid mods
+    REQUIRE(rm.repo().games.empty());
+    REQUIRE_FALSE(rm.lastError().empty());
+}
+
+TEST_CASE("RepoManager::fetch - all-game-fetches-failed surfaces specific error", "[fetch]") {
+    CurlMock::reset();
+    CurlMock::setResponse("https://repo.example.com/repo.json", R"({
+        "games": [
+            { "path": "games/a.json" },
+            { "path": "games/b.json" }
+        ]
+    })");
+    // Neither game.json registered → all fetches fail
+    RepoManager rm;
+    rm.fetch("https://repo.example.com/repo.json");
+
+    REQUIRE(rm.repo().games.empty());
+    REQUIRE_FALSE(rm.lastError().empty());
+    // Error message should mention that all game fetches failed, not just
+    // the generic "no valid mods"
+    REQUIRE(rm.lastError().find("game fetches failed") != std::string::npos);
+}
+
+TEST_CASE("RepoManager::fetch - oversized response body is rejected", "[fetch]") {
+    CurlMock::reset();
+    // Build a body well over 10MB cap to trigger writeString abort
+    std::string huge(11 * 1024 * 1024, 'X');
+    CurlMock::setResponse("https://repo.example.com/repo.json", huge);
+
+    RepoManager rm;
+    rm.fetch("https://repo.example.com/repo.json");
+
+    REQUIRE_FALSE(rm.lastError().empty());
+    REQUIRE(rm.repo().games.empty());
+}
+
 TEST_CASE("RepoManager::fetch - second fetch resets repo state", "[fetch]") {
     CurlMock::reset();
     CurlMock::setResponse("https://r1.example.com/repo.json", std::string(R"({

@@ -1,6 +1,7 @@
 #include "CacheManager.h"
 #include "app/Paths.h"
 #include "util/Logger.h"
+#include "net/DownloadManager.h"
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -65,25 +66,12 @@ void CacheManager::cleanupCorruptMods() {
                 struct stat st;
                 if (stat(modinfoPath.c_str(), &st) == 0) continue; // ok
 
-                // No modinfo.json - corrupt/partial install, remove it
+                // No modinfo.json - corrupt/partial install, remove it.
+                // Use the proper recursive rmrf -- the inline single-level
+                // delete here used to leave nested subdirectories behind.
                 LOG_WARN("CacheManager: corrupt mod folder (no modinfo.json): %s/%s - removing",
                          titleId.c_str(), modId.c_str());
-
-                // rmrf the mod folder
-                // Simple recursive delete
-                std::string cmd = modPath; // we'll do it manually
-                DIR* d2 = opendir(modPath.c_str());
-                if (d2) {
-                    struct dirent* f;
-                    while ((f = readdir(d2)) != nullptr) {
-                        std::string fn = f->d_name;
-                        if (fn == "." || fn == "..") continue;
-                        std::string fp = modPath + "/" + fn;
-                        remove(fp.c_str());
-                    }
-                    closedir(d2);
-                }
-                if (rmdir(modPath.c_str()) == 0) removed++;
+                if (DownloadManager::rmrf(modPath)) removed++;
             }
             closedir(modDir);
         }

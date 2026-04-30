@@ -1,5 +1,6 @@
 #include "DownloadQueueScreen.h"
 #include "app/App.h"
+#include "util/TextCache.h"
 
 static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 
@@ -23,6 +24,12 @@ void DownloadQueueScreen::onExit() {}
 
 void DownloadQueueScreen::handleInput(const Input& input) {
     auto jobs = DownloadQueue::get().jobs();
+
+    // Clamp index after the list may have shrunk (cleanupFinished or
+    // dismissError can erase entries between renders).
+    if (m_selectedIdx >= (int)jobs.size())
+        m_selectedIdx = jobs.empty() ? 0 : (int)jobs.size() - 1;
+    if (m_selectedIdx < 0) m_selectedIdx = 0;
 
     if (input.b) {
         // If selected job is an error, dismiss it; otherwise go back
@@ -76,6 +83,11 @@ void DownloadQueueScreen::render(SDL_Renderer* renderer) {
     if (m_fontLarge) renderText(renderer, "Downloads", 110, 9, white, m_fontLarge);
 
     auto jobs = DownloadQueue::get().jobs();
+
+    // Same clamp as handleInput -- list can shrink between calls.
+    if (m_selectedIdx >= (int)jobs.size())
+        m_selectedIdx = jobs.empty() ? 0 : (int)jobs.size() - 1;
+    if (m_selectedIdx < 0) m_selectedIdx = 0;
 
     if (jobs.empty()) {
         if (m_fontNormal)
@@ -164,13 +176,10 @@ void DownloadQueueScreen::renderProgressBar(SDL_Renderer* renderer,
 void DownloadQueueScreen::renderText(SDL_Renderer* renderer, const std::string& text,
                                       int x, int y, SDL_Color color, TTF_Font* font) {
     if (!font || text.empty()) return;
-    SDL_Surface* s = TTF_RenderUTF8_Blended(font, text.c_str(), color);
-    if (!s) return;
-    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
-    if (t) {
-        SDL_Rect dst = {x, y, s->w, s->h};
-        SDL_RenderCopy(renderer, t, nullptr, &dst);
-        SDL_DestroyTexture(t);
-    }
-    SDL_FreeSurface(s);
+    SDL_Texture* t = TextCache::get().texture(renderer, font, color, text);
+    if (!t) return;
+    int w = 0, h = 0;
+    TextCache::get().sizeOf(t, &w, &h);
+    SDL_Rect dst = {x, y, w, h};
+    SDL_RenderCopy(renderer, t, nullptr, &dst);
 }

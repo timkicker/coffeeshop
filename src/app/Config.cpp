@@ -4,6 +4,8 @@
 #include <json.hpp>
 #include <fstream>
 #include <sys/stat.h>
+#include <cerrno>
+#include <cstring>
 
 bool Config::loadFrom(const std::string& path) {
     LOG_INFO("Loading config from: %s", path.c_str());
@@ -49,6 +51,8 @@ bool Config::load() {
 
 bool Config::save() {
     std::string base = Paths::modstoreBase();
-    mkdir(base.c_str(), 0755);
+    if (mkdir(base.c_str(), 0755) != 0 && errno != EEXIST) {
+        LOG_WARN("Config: mkdir(%s) failed: %s", base.c_str(), strerror(errno));
+    }
     return saveTo(configPath());
 }

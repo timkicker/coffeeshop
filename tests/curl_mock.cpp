@@ -120,7 +120,12 @@ CURLcode curl_easy_perform(CURL* curl) {
     }
 
     if (h->writeFunc && !m.body.empty()) {
-        h->writeFunc(const_cast<char*>(m.body.data()), 1, m.body.size(), h->writeData);
+        size_t got = h->writeFunc(const_cast<char*>(m.body.data()), 1,
+                                   m.body.size(), h->writeData);
+        if (got != m.body.size()) {
+            // Callback aborted (e.g. body too large) -- match real curl
+            return CURLE_WRITE_ERROR;
+        }
     }
     return CURLE_OK;
 }

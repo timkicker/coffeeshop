@@ -40,7 +40,11 @@ void ImageCache::stop() {
 void ImageCache::request(const std::string& url) {
     std::lock_guard<std::mutex> lock(m_mutex);
     auto it = m_cache.find(url);
-    if (it != m_cache.end()) return; // already queued or done
+    if (it != m_cache.end()) {
+        // Allow retry on prior failure; otherwise no-op.
+        if (it->second.state != State::Failed) return;
+        it->second.data.clear();
+    }
     m_cache[url].state = State::Loading;
     m_queue.push(url);
     m_cv.notify_one();

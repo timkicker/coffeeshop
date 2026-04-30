@@ -7,10 +7,12 @@ extern void elog(const char* msg);
 #include "ui/MainLayout.h"
 #include "util/Logger.h"
 #include <cstdarg>
+#include <cerrno>
 #include <sys/stat.h>
 #include "net/DownloadQueue.h"
 #include <sysapp/launch.h>
 #include "util/ImageCache.h"
+#include "util/TextCache.h"
 #include "app/CacheManager.h"
 
 #include <SDL2/SDL.h>
@@ -20,12 +22,10 @@ extern void elog(const char* msg);
 #include <SDL2/SDL_image.h>
 
 #ifdef __WUT__
-#if BUILD_HW
 #include <nn/ac.h>
 extern "C" {
     void socket_lib_init();
 }
-#endif
 #endif
 
 App::App() = default;
@@ -37,6 +37,8 @@ App::~App() {
     m_screens.clear();
     elog("~App: ImageCache clear");
     if (m_renderer) ImageCache::get().clear(m_renderer);
+    elog("~App: TextCache clear");
+    TextCache::get().clear();
     elog("~App: DestroyRenderer");
     if (m_renderer) SDL_DestroyRenderer(m_renderer);
     elog("~App: DestroyWindow");
@@ -53,12 +55,14 @@ App::~App() {
 bool App::init() {
     elog("Network init...");
 #ifdef __WUT__
-#if BUILD_HW
+    // Initialize the WUT network stack on both hardware AND Cemu builds.
+    // Without these calls, Cemu's emulated socket layer never finishes
+    // setup and curl connect() hangs. The previous BUILD_HW gate broke
+    // cemu mode entirely (app stuck on "Loading repos...").
     nn::ac::Initialize();
     nn::ac::Connect();
     socket_lib_init();
     elog("Network ready");
-#endif
 #endif
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) != 0) {
@@ -97,7 +101,9 @@ bool App::init() {
     elog("Renderer OK");
 
     elog("before logger");
-    mkdir((Paths::modstoreBase()).c_str(), 0755);
+    if (mkdir((Paths::modstoreBase()).c_str(), 0755) != 0 && errno != EEXIST) {
+        elog("mkdir for app dir failed - logger may not work");
+    }
     elog("mkdir done");
     Logger::get().init(Paths::modstoreBase() + "/app.log");
     elog("logger init done");
@@ -115,6 +121,7 @@ bool App::init() {
 
 void App::run() {
     m_running = true;
+    int pruneCounter = 0;
     while (m_running && !m_screens.empty() && WHBProcIsRunning()) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -122,6 +129,9 @@ void App::run() {
         }
         update();
         render();
+        TextCache::get().tick();
+        // Prune unused text textures every ~5 seconds (at 60fps).
+        if (++pruneCounter > 300) { TextCache::get().prune(); pruneCounter = 0; }
     }
 #ifdef __WUT__
     // Drain ProcUI until Aroma confirms exit - required for WHBProcShutdown to work

@@ -51,7 +51,7 @@ static void addStoredEntry(std::vector<uint8_t>& v, const std::string& name,
     appendBytes(v, content.data(), content.size());
 }
 
-// Raw-deflate compress (no zlib header) — matches inflateInit2(-MAX_WBITS).
+// Raw-deflate compress (no zlib header) -- matches inflateInit2(-MAX_WBITS).
 static std::vector<uint8_t> rawDeflate(const std::string& src) {
     std::vector<uint8_t> out(src.size() + 64 + src.size() / 100);
     z_stream zs{};
@@ -253,7 +253,7 @@ TEST_CASE("ZipExtractor::extract - rejects entry with absurdly long name", "[zip
     appendU32(zip, 0);
     appendU16(zip, 10000);  // nameLen way too large
     appendU16(zip, 0);
-    // No name bytes follow — extract should bail before reading them.
+    // No name bytes follow -- extract should bail before reading them.
 
     auto zipPath = writeTempZip(zip, "longname");
     auto destDir = makeDestDir("longname");
@@ -282,7 +282,7 @@ TEST_CASE("ZipExtractor::extract - empty file fails gracefully", "[zip]") {
 TEST_CASE("ZipExtractor::extract - truncated header returns false", "[zip]") {
     std::vector<uint8_t> zip;
     appendU32(zip, LOCAL_FILE_SIG);
-    appendU16(zip, 20); // partial header — file ends here mid-LFH
+    appendU16(zip, 20); // partial header -- file ends here mid-LFH
     auto zipPath = writeTempZip(zip, "truncheader");
     auto destDir = makeDestDir("truncheader");
 
@@ -338,7 +338,7 @@ TEST_CASE("ZipExtractor::extract - missing zip file returns false", "[zip]") {
 // ─── Deflated entries ──────────────────────────────────────────────────────
 
 TEST_CASE("ZipExtractor::extract - deflated file extracts correctly", "[zip][deflate]") {
-    // Repetitive content compresses well — verifies the inflate path actually
+    // Repetitive content compresses well -- verifies the inflate path actually
     // decompresses rather than just copying bytes.
     std::string content;
     for (int i = 0; i < 100; i++) content += "the quick brown fox jumps over the lazy dog. ";
@@ -439,6 +439,99 @@ TEST_CASE("ZipExtractor::extract - directory entry creates dir", "[zip]") {
     rmTree(destDir);
 }
 
+// ─── Phase 4 hardening: stricter validation ────────────────────────────────
+
+TEST_CASE("ZipExtractor::extract - 'my..mod' is NOT rejected (false-positive fix)",
+          "[zip][security]") {
+    // Old substring check rejected this. Component-based check should accept.
+    std::vector<uint8_t> zip;
+    addStoredEntry(zip, "my..mod/config.txt", "ok");
+    appendEOCD(zip);
+
+    auto zipPath = writeTempZip(zip, "dotdot_legit");
+    auto destDir = makeDestDir("dotdot_legit");
+
+    REQUIRE(ZipExtractor::extract(zipPath, destDir));
+    REQUIRE(fileExists(destDir + "/my..mod/config.txt"));
+
+    remove(zipPath.c_str());
+    rmTree(destDir);
+}
+
+TEST_CASE("ZipExtractor::extract - absolute path with leading / is rejected",
+          "[zip][security]") {
+    std::vector<uint8_t> zip;
+    addStoredEntry(zip, "/etc/passwd", "evil");
+    appendEOCD(zip);
+
+    auto zipPath = writeTempZip(zip, "abs_path");
+    auto destDir = makeDestDir("abs_path");
+
+    REQUIRE_FALSE(ZipExtractor::extract(zipPath, destDir));
+
+    remove(zipPath.c_str());
+    rmTree(destDir);
+}
+
+TEST_CASE("ZipExtractor::extract - large stored entry uses chunked extraction",
+          "[zip][memory]") {
+    // 1 MB stored entry -- exercises the chunking loop instead of allocating
+    // a single 1MB vector. Functional correctness is what we assert here.
+    std::string big(1024 * 1024, 'Z');
+    std::vector<uint8_t> zip;
+    addStoredEntry(zip, "big_stored.bin", big);
+    appendEOCD(zip);
+
+    auto zipPath = writeTempZip(zip, "stored_big");
+    auto destDir = makeDestDir("stored_big");
+
+    REQUIRE(ZipExtractor::extract(zipPath, destDir));
+    REQUIRE(readFile(destDir + "/big_stored.bin") == big);
+
+    remove(zipPath.c_str());
+    rmTree(destDir);
+}
+
+TEST_CASE("ZipExtractor::extract - excessive entry count rejected (ZIP bomb)",
+          "[zip][security]") {
+    // Build 10001 tiny entries -- should hit the kMaxEntries cap (10000) and abort.
+    std::vector<uint8_t> zip;
+    for (int i = 0; i < 10001; i++) {
+        addStoredEntry(zip, std::string("f") + std::to_string(i) + ".txt", "x");
+    }
+    appendEOCD(zip);
+
+    auto zipPath = writeTempZip(zip, "zipbomb");
+    auto destDir = makeDestDir("zipbomb");
+
+    REQUIRE_FALSE(ZipExtractor::extract(zipPath, destDir));
+
+    remove(zipPath.c_str());
+    rmTree(destDir);
+}
+
+TEST_CASE("ZipExtractor::extract - oversized extraLen rejected", "[zip]") {
+    // Build LFH manually with extraLen = 10000 but no actual extra bytes
+    std::vector<uint8_t> zip;
+    appendU32(zip, LOCAL_FILE_SIG);
+    appendU16(zip, 20); appendU16(zip, 0); appendU16(zip, 0);
+    appendU16(zip, 0);  appendU16(zip, 0); appendU32(zip, 0);
+    appendU32(zip, 0);  appendU32(zip, 0);
+    std::string name = "x.txt";
+    appendU16(zip, name.size());
+    appendU16(zip, 10000); // claim 10000 extra bytes
+    appendBytes(zip, name.data(), name.size());
+    // No extra bytes provided.
+
+    auto zipPath = writeTempZip(zip, "bigextra");
+    auto destDir = makeDestDir("bigextra");
+
+    REQUIRE_FALSE(ZipExtractor::extract(zipPath, destDir));
+
+    remove(zipPath.c_str());
+    rmTree(destDir);
+}
+
 // ─── Fault injection: I/O failures ─────────────────────────────────────────
 
 TEST_CASE("ZipExtractor::extract - fopen failure on read-only dest dir returns false",
@@ -481,7 +574,7 @@ TEST_CASE("ZipExtractor::extract - fwrite failure via /dev/full symlink returns 
     // /dev/full accepts opens but every write returns ENOSPC.
     std::string target = destDir + "/fullfile.bin";
     if (symlink("/dev/full", target.c_str()) != 0) {
-        // /dev/full not available (non-Linux) — skip
+        // /dev/full not available (non-Linux) -- skip
         WARN("/dev/full not available, skipping fwrite-fault test");
         remove(zipPath.c_str());
         rmTree(destDir);
@@ -490,12 +583,9 @@ TEST_CASE("ZipExtractor::extract - fwrite failure via /dev/full symlink returns 
 
     bool result = ZipExtractor::extract(zipPath, destDir);
 
-    // The fwrite return-value check should detect the ENOSPC and return false.
-    // Note: depending on stdio buffering exact behavior, this may pass-with-warning
-    // on platforms where fwrite fully buffers and only fclose surfaces the error.
-    // ZipExtractor doesn't check fclose, so be lenient: we accept either outcome
-    // but assert the file did not get the full payload written.
-    (void)result;
+    // After Phase 1: ZipExtractor checks fclose() so even buffered ENOSPC
+    // failures are detected. Assert the failure surfaces.
+    REQUIRE_FALSE(result);
 
     remove(zipPath.c_str());
     rmTree(destDir);

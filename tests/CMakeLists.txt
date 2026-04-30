@@ -27,6 +27,9 @@ add_executable(cupstore_tests
     test_install_helper.cpp
     test_repo_manager_fetch.cpp
     test_integration.cpp
+    test_logger.cpp
+    test_http_client.cpp
+    test_text_cache.cpp
     curl_mock.cpp
     stubs.cpp
     ${SRC}/mods/ConflictChecker.cpp
@@ -39,7 +42,11 @@ add_executable(cupstore_tests
     ${SRC}/net/DownloadQueue.cpp
     ${SRC}/app/Config.cpp
     ${SRC}/app/CacheManager.cpp
+    ${SRC}/net/HttpClient.cpp
+    ${SRC}/util/TextCache.cpp
 )
+# TextCache pulls SDL headers; we only test the no-renderer paths so functions
+# can be stubbed.
 target_include_directories(cupstore_tests PRIVATE
     ${SRC}
     ${LIBS}

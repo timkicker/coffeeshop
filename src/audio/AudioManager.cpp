@@ -43,7 +43,10 @@ void AudioManager::shutdown() {
     stopMusic();
     for (auto& [id, chunk] : m_sounds) Mix_FreeChunk(chunk);
     m_sounds.clear();
-    if (m_music) { Mix_FreeMusic(m_music); m_music = nullptr; }
+    {
+        std::lock_guard<std::mutex> lock(m_musicMutex);
+        if (m_music) { Mix_FreeMusic(m_music); m_music = nullptr; }
+    }
     Mix_CloseAudio();
     Mix_Quit();
     m_initialized = false;
@@ -58,6 +61,7 @@ void AudioManager::playSound(SoundId id) {
 void AudioManager::playMusic(MusicTrack track) {
     if (!m_initialized || !m_musicEnabled) return;
     const char* file = (track == MusicTrack::Main) ? "theme_main.ogg" : "theme_alt.ogg";
+    std::lock_guard<std::mutex> lock(m_musicMutex);
     if (Mix_PlayingMusic() && m_currentTrack == track) return;
     if (m_music) { Mix_FreeMusic(m_music); m_music = nullptr; }
     m_music = Mix_LoadMUS(sndPath(file).c_str());
@@ -67,9 +71,23 @@ void AudioManager::playMusic(MusicTrack track) {
     m_currentTrack = track;
 }
 
+void AudioManager::playMusicFadeIn(MusicTrack track, int fadeMs) {
+    if (!m_initialized || !m_musicEnabled) return;
+    const char* file = (track == MusicTrack::Main) ? "theme_main.ogg" : "theme_alt.ogg";
+    std::lock_guard<std::mutex> lock(m_musicMutex);
+    if (Mix_PlayingMusic() && m_currentTrack == track) return;
+    if (m_music) { Mix_FreeMusic(m_music); m_music = nullptr; }
+    m_music = Mix_LoadMUS(sndPath(file).c_str());
+    if (!m_music) { LOG_WARN("AudioManager: failed to load %s: %s", file, Mix_GetError()); return; }
+    Mix_VolumeMusic(64);
+    Mix_FadeInMusic(m_music, -1, fadeMs);
+    m_currentTrack = track;
+}
+
 void AudioManager::stopMusic() {
     if (!m_initialized) return;
     Mix_HaltMusic();
+    std::lock_guard<std::mutex> lock(m_musicMutex);
     if (m_music) { Mix_FreeMusic(m_music); m_music = nullptr; }
 }
 

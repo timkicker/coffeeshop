@@ -6,6 +6,7 @@
 #include <sysapp/launch.h>
 #include "mods/InstalledScanner.h"
 #include "util/Logger.h"
+#include "util/TextCache.h"
 #include "app/Paths.h"
 #include <sys/statvfs.h>
 #include <sys/stat.h>
@@ -116,7 +117,11 @@ void MainLayout::refreshInstalled() {
 
 void MainLayout::handleInput(const Input& input) {
     if (input.minus) {
-        if (m_fetchThread.joinable()) m_fetchThread.detach();
+        // Stop and join the fetch thread before exiting -- detach() risks the
+        // background thread accessing m_repo / m_repoStatus after the screen
+        // is destroyed.
+        m_stopFetch = true;
+        if (m_fetchThread.joinable()) m_fetchThread.join();
         m_app->startExit();
         return;
     }
@@ -136,7 +141,7 @@ void MainLayout::handleInput(const Input& input) {
     }
     if (input.r) {
         if      (m_activeTab == Tab::Browse)    { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
-        else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Settings;  m_settingsItems = buildSettingsItems(m_config, m_repoStatus); AudioManager::get().playSound(SoundId::Navigate); }
+        else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Settings;  m_settingsDirty = true; AudioManager::get().playSound(SoundId::Navigate); }
     }
 
     if (m_activeTab == Tab::Browse)    handleBrowseInput(input);
@@ -278,15 +283,19 @@ void MainLayout::update() {
     if (m_musicFadeDelay > 0) {
         m_musicFadeDelay--;
         if (m_musicFadeDelay == 0 && m_config.musicTrack != "off") {
-            const char* f = (m_config.musicTrack == "alt")
-                ? "/vol/content/sounds/theme_alt.ogg"
-                : "/vol/content/sounds/theme_main.ogg";
-            auto* music = Mix_LoadMUS(f);
-            if (music) Mix_FadeInMusic(music, -1, 3000);
+            // Route through AudioManager so the Mix_Music* gets tracked and
+            // freed on shutdown (was leaked before).
+            MusicTrack t = (m_config.musicTrack == "alt")
+                ? MusicTrack::Alt : MusicTrack::Main;
+            AudioManager::get().playMusicFadeIn(t, 3000);
         }
     }
     if (m_installedDirty)
         refreshInstalled();
+    if (m_settingsDirty) {
+        m_settingsItems = buildSettingsItems(m_config, m_repoStatus);
+        m_settingsDirty = false;
+    }
 }
 
 void MainLayout::render(SDL_Renderer* renderer) {
@@ -836,7 +845,7 @@ void MainLayout::handleSettingsInput(const Input& input) {
             }
             ImageCache::get().clear(nullptr);
             LOG_INFO("Settings: image cache cleared");
-            m_settingsItems = buildSettingsItems(m_config, m_repoStatus);
+            m_settingsDirty = true;
         }
         else if (label == "Clear all cache") {
             std::string dir = Paths::cacheDir();
@@ -849,7 +858,7 @@ void MainLayout::handleSettingsInput(const Input& input) {
             }
             ImageCache::get().clear(nullptr);
             LOG_INFO("Settings: full cache cleared");
-            m_settingsItems = buildSettingsItems(m_config, m_repoStatus);
+            m_settingsDirty = true;
         }
         else if (label == "View log") {
             m_showLog   = true;
@@ -962,13 +971,10 @@ void MainLayout::renderOnboarding(SDL_Renderer* renderer) {
 void MainLayout::renderText(SDL_Renderer* renderer, const std::string& text,
                              int x, int y, SDL_Color color, TTF_Font* font) {
     if (!font || text.empty()) return;
-    SDL_Surface* s = TTF_RenderText_Blended(font, text.c_str(), color);
-    if (!s) return;
-    SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
-    if (t) {
-        SDL_Rect dst = {x, y, s->w, s->h};
-        SDL_RenderCopy(renderer, t, nullptr, &dst);
-        SDL_DestroyTexture(t);
-    }
-    SDL_FreeSurface(s);
+    SDL_Texture* t = TextCache::get().texture(renderer, font, color, text);
+    if (!t) return;
+    int w = 0, h = 0;
+    TextCache::get().sizeOf(t, &w, &h);
+    SDL_Rect dst = {x, y, w, h};
+    SDL_RenderCopy(renderer, t, nullptr, &dst);
 }

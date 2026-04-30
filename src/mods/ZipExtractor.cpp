@@ -17,17 +17,67 @@ static constexpr uint32_t DATA_DESC_SIG    = 0x08074b50;
 static constexpr uint32_t CENTRAL_DIR_SIG  = 0x02014b50;
 static constexpr uint32_t END_CENTRAL_SIG  = 0x06054b50;
 
-static bool s_readError = false;
+// Local read state -- passed by reference so concurrent extract() calls don't
+// clobber each other (was a static global before).
+struct ReadState { bool error = false; };
 
-static uint16_t read16(FILE* f) {
+// ZIP-bomb prevention: refuse to process more than this many entries.
+static constexpr int kMaxEntries = 10000;
+// Reject entries whose names exceed this length.
+static constexpr int kMaxNameLen = 4096;
+// Stored-entry stream buffer size -- bounds memory regardless of compSize.
+static constexpr size_t kCopyBuf = 64 * 1024;
+
+static uint16_t read16(FILE* f, ReadState& rs) {
     uint8_t b[2];
-    if (fread(b, 1, 2, f) != 2) { s_readError = true; return 0; }
+    if (fread(b, 1, 2, f) != 2) { rs.error = true; return 0; }
     return (uint16_t)(b[0] | (b[1] << 8));
 }
-static uint32_t read32(FILE* f) {
+static uint32_t read32(FILE* f, ReadState& rs) {
     uint8_t b[4];
-    if (fread(b, 1, 4, f) != 4) { s_readError = true; return 0; }
+    if (fread(b, 1, 4, f) != 4) { rs.error = true; return 0; }
     return (uint32_t)(b[0] | (b[1]<<8) | (b[2]<<16) | (b[3]<<24));
+}
+
+// Consume the optional data descriptor that follows entries with general-flag
+// bit 3 set. Two formats exist: with-signature (16 bytes total) and
+// without-signature (12 bytes). If the next 4 bytes match a *known local-header
+// signature*, no descriptor is present despite the flag -- seek back so the
+// outer loop can pick up the next entry. Without this guard, we'd silently
+// eat 8 bytes from the next entry's header and desync.
+static void skipDataDescriptor(FILE* f, ReadState& rs) {
+    long pos = ftell(f);
+    uint32_t maybe = read32(f, rs);
+    if (rs.error) return;
+    if (maybe == LOCAL_FILE_SIG || maybe == CENTRAL_DIR_SIG ||
+        maybe == END_CENTRAL_SIG) {
+        // No descriptor present; rewind so the loop sees the signature.
+        fseek(f, pos, SEEK_SET);
+        return;
+    }
+    if (maybe == DATA_DESC_SIG) {
+        // signature + crc + compSize + uncompSize
+        read32(f, rs); read32(f, rs); read32(f, rs);
+    } else {
+        // No signature: maybe was crc; consume compSize + uncompSize
+        read32(f, rs); read32(f, rs);
+    }
+}
+
+// Reject ".." components and absolute paths. The previous substring-only
+// check produced false positives for legit names like "my..mod".
+static bool nameIsSafe(const std::string& name) {
+    if (name.empty()) return true;
+    if (name.front() == '/') return false;            // absolute
+    size_t i = 0;
+    while (i < name.size()) {
+        size_t end = name.find('/', i);
+        if (end == std::string::npos) end = name.size();
+        std::string part = name.substr(i, end - i);
+        if (part == "..") return false;
+        i = end + 1;
+    }
+    return true;
 }
 
 bool ZipExtractor::ensureDir(const std::string& path) {
@@ -49,14 +99,27 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
         return false;
     }
 
+    // Total file size -- used for bounds checks below, since fseek on POSIX
+    // happily seeks past EOF without erroring.
+    fseek(f, 0, SEEK_END);
+    long fileSize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
     ensureDir(destDir);
 
     bool ok = true;
-    s_readError = false;
+    ReadState rs;
+    int entryCount = 0;
 
     while (true) {
-        uint32_t sig = read32(f);
-        if (s_readError || feof(f)) break;
+        if (++entryCount > kMaxEntries) {
+            LOG_ERROR("ZipExtractor: too many entries (%d, max %d) -- possible ZIP bomb",
+                      entryCount, kMaxEntries);
+            ok = false;
+            break;
+        }
+        uint32_t sig = read32(f, rs);
+        if (rs.error || feof(f)) break;
 
         if (sig == CENTRAL_DIR_SIG || sig == END_CENTRAL_SIG) break;
 
@@ -67,24 +130,24 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
         }
 
         // Local file header
-        /* version needed */ read16(f);
-        uint16_t flags      = read16(f);
-        uint16_t method     = read16(f);
-        /* mod time */       read16(f);
-        /* mod date */       read16(f);
-        /* crc32 */          read32(f);
-        uint32_t compSize   = read32(f);
-        uint32_t uncompSize = read32(f);
-        uint16_t nameLen    = read16(f);
-        uint16_t extraLen   = read16(f);
+        /* version needed */ read16(f, rs);
+        uint16_t flags      = read16(f, rs);
+        uint16_t method     = read16(f, rs);
+        /* mod time */       read16(f, rs);
+        /* mod date */       read16(f, rs);
+        /* crc32 */          read32(f, rs);
+        uint32_t compSize   = read32(f, rs);
+        uint32_t uncompSize = read32(f, rs);
+        uint16_t nameLen    = read16(f, rs);
+        uint16_t extraLen   = read16(f, rs);
 
-        if (s_readError) {
+        if (rs.error) {
             LOG_ERROR("ZipExtractor: read error in local file header");
             ok = false;
             break;
         }
 
-        if (nameLen > 4096) {
+        if (nameLen > kMaxNameLen) {
             LOG_ERROR("ZipExtractor: entry name too long (%u bytes)", nameLen);
             ok = false;
             break;
@@ -96,10 +159,20 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
             ok = false;
             break;
         }
-        fseek(f, extraLen, SEEK_CUR);
+        if (extraLen > 0) {
+            // Bounds-check against file size (fseek doesn't fail on past-EOF).
+            long before = ftell(f);
+            if (before < 0 || (long)before + extraLen > fileSize) {
+                LOG_ERROR("ZipExtractor: extraLen %u past EOF for %s",
+                          extraLen, name.c_str());
+                ok = false;
+                break;
+            }
+            fseek(f, extraLen, SEEK_CUR);
+        }
 
-        if (name.find("..") != std::string::npos) {
-            LOG_ERROR("ZipExtractor: path traversal blocked: %s", name.c_str());
+        if (!nameIsSafe(name)) {
+            LOG_ERROR("ZipExtractor: unsafe entry path blocked: %s", name.c_str());
             ok = false;
             break;
         }
@@ -109,13 +182,8 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
 
         if (isDir) {
             ensureDir(outPath);
-            // Data descriptor if flag bit 3 set
-            if (flags & 0x08) {
-                uint32_t maybeS = read32(f);
-                if (maybeS == DATA_DESC_SIG) { read32(f); read32(f); read32(f); }
-                else { read32(f); read32(f); }
-            }
-            if (s_readError) { ok = false; break; }
+            if (flags & 0x08) skipDataDescriptor(f, rs);
+            if (rs.error) { ok = false; break; }
             continue;
         }
 
@@ -133,20 +201,35 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
         }
 
         if (method == 0) {
-            // Stored
-            std::vector<uint8_t> buf(compSize);
-            if (fread(buf.data(), 1, compSize, f) != compSize) {
-                LOG_ERROR("ZipExtractor: short read on stored entry %s", name.c_str());
-                ok = false;
-            } else if (fwrite(buf.data(), 1, compSize, out) != compSize) {
-                LOG_ERROR("ZipExtractor: write failed for %s", name.c_str());
-                ok = false;
+            // Stored -- stream in chunks. Allocating compSize up-front would
+            // OOM on large stored entries (e.g. uncompressed multi-MB files).
+            std::vector<uint8_t> buf(kCopyBuf);
+            uint32_t remaining = compSize;
+            while (remaining > 0) {
+                size_t chunk = std::min<size_t>(kCopyBuf, remaining);
+                if (fread(buf.data(), 1, chunk, f) != chunk) {
+                    LOG_ERROR("ZipExtractor: short read on stored entry %s", name.c_str());
+                    ok = false;
+                    break;
+                }
+                if (fwrite(buf.data(), 1, chunk, out) != chunk) {
+                    LOG_ERROR("ZipExtractor: write failed for %s", name.c_str());
+                    ok = false;
+                    break;
+                }
+                remaining -= chunk;
             }
 
         } else if (method == 8) {
             // Deflated
             z_stream zs{};
-            inflateInit2(&zs, -MAX_WBITS);
+            if (inflateInit2(&zs, -MAX_WBITS) != Z_OK) {
+                LOG_ERROR("ZipExtractor: inflateInit2 failed for %s", name.c_str());
+                ok = false;
+                fseek(f, compSize, SEEK_CUR);
+                fclose(out);
+                continue;
+            }
 
             std::vector<uint8_t> inBuf(4096);
             std::vector<uint8_t> outBuf(4096);
@@ -189,15 +272,15 @@ bool ZipExtractor::extract(const std::string& zipPath, const std::string& destDi
             fseek(f, compSize, SEEK_CUR);
         }
 
-        fclose(out);
-
-        // Data descriptor if flag bit 3 set
-        if (flags & 0x08) {
-            uint32_t maybeS = read32(f);
-            if (maybeS == DATA_DESC_SIG) { read32(f); read32(f); read32(f); }
-            else { read32(f); read32(f); }
+        // fclose surfaces buffered-write failures (e.g. ENOSPC on small writes
+        // that fit entirely in the stdio buffer until close).
+        if (fclose(out) != 0) {
+            LOG_ERROR("ZipExtractor: fclose failed for %s (likely ENOSPC)", name.c_str());
+            ok = false;
         }
-        if (s_readError) { ok = false; break; }
+
+        if (flags & 0x08) skipDataDescriptor(f, rs);
+        if (rs.error) { ok = false; break; }
     }
 
     fclose(f);

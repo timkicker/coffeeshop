@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <unordered_map>
+#include <mutex>
 #include <SDL2/SDL_mixer.h>
 
 enum class SoundId {
@@ -23,6 +24,7 @@ public:
     void shutdown();
     void playSound(SoundId id);
     void playMusic(MusicTrack track);
+    void playMusicFadeIn(MusicTrack track, int fadeMs);
     void stopMusic();
     bool musicEnabled() const { return m_musicEnabled; }
     bool soundEnabled() const { return m_soundEnabled; }
@@ -36,4 +38,5 @@ private:
     MusicTrack m_currentTrack = MusicTrack::Main;
     std::unordered_map<int, Mix_Chunk*> m_sounds;
     Mix_Music* m_music = nullptr;
+    std::mutex m_musicMutex; // protects m_music + m_currentTrack
 };

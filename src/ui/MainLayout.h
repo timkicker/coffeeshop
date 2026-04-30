@@ -93,6 +93,7 @@ private:
     // Settings state
     std::vector<SItem>        m_settingsItems;
     std::vector<SItem> buildSettingsItems(const Config& cfg, const std::map<std::string,std::string>& repoStatus);
+    bool                      m_settingsDirty     = true;  // initial build via update()
     int                       m_settingsSelected  = 0;
     int                       m_settingsScroll    = 0;
     bool                      m_showLog           = false;
