@@ -55,7 +55,10 @@ int DownloadQueue::activeCount() {
 
 void DownloadQueue::start() {
     if (m_running.exchange(true)) return; // already started
-    m_worker = std::thread(&DownloadQueue::workerLoop, this);
+    int n = (m_workerCount >= 1) ? m_workerCount : 1;
+    m_workers.reserve(n);
+    for (int i = 0; i < n; i++)
+        m_workers.emplace_back(&DownloadQueue::workerLoop, this);
 }
 
 void DownloadQueue::stop() {
@@ -65,7 +68,8 @@ void DownloadQueue::stop() {
     }
     m_running = false;
     m_cv.notify_all();
-    if (m_worker.joinable()) m_worker.join();
+    for (auto& w : m_workers) if (w.joinable()) w.join();
+    m_workers.clear();
 }
 
 void DownloadQueue::cancelJob(int index) {
@@ -171,6 +175,7 @@ void DownloadQueue::processJob(int idx, const Mod& mod,
 
     DownloadManager dm;
     dm.setCancelFlag(cancelFlag);
+    dm.setExpectedHash(mod.sha256);
     dm.run(mod.download, tmpPath, destDir);
 
     std::lock_guard<std::mutex> lock(m_mutex);

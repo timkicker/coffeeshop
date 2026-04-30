@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <cstring>
+#include <ctime>
 #include <vector>
 #include <string>
 
@@ -30,6 +31,82 @@ void CacheManager::cleanupStaleZips() {
     closedir(d);
     if (removed > 0)
         LOG_INFO("CacheManager: cleaned up %d stale zip(s)", removed);
+}
+
+void CacheManager::cleanupStalePartials() {
+    std::string dir = Paths::cacheDir();
+    DIR* d = opendir(dir.c_str());
+    if (!d) return;
+
+    int removed = 0;
+    time_t now = time(nullptr);
+    constexpr time_t kMaxAgeSec = 24 * 60 * 60; // 24h
+
+    struct dirent* e;
+    while ((e = readdir(d)) != nullptr) {
+        std::string name = e->d_name;
+        if (name.size() < 8) continue;
+        if (name.substr(name.size() - 8) != ".partial") continue;
+        std::string path = dir + "/" + name;
+        struct stat st;
+        if (stat(path.c_str(), &st) != 0) continue;
+        if (now - st.st_mtime > kMaxAgeSec) {
+            if (remove(path.c_str()) == 0) {
+                LOG_INFO("CacheManager: removed stale .partial: %s", name.c_str());
+                removed++;
+            }
+        }
+    }
+    closedir(d);
+    if (removed > 0)
+        LOG_INFO("CacheManager: cleaned up %d stale partial(s)", removed);
+}
+
+void CacheManager::cleanupStaleStaging() {
+    // 1) Delete every subdirectory of cache/staging.
+    std::string staging = Paths::stagingDir();
+    DIR* d = opendir(staging.c_str());
+    if (d) {
+        int removed = 0;
+        struct dirent* e;
+        while ((e = readdir(d)) != nullptr) {
+            std::string name = e->d_name;
+            if (name == "." || name == "..") continue;
+            if (DownloadManager::rmrf(staging + "/" + name)) removed++;
+        }
+        closedir(d);
+        if (removed > 0)
+            LOG_INFO("CacheManager: cleared %d stale staging entr%s",
+                     removed, removed == 1 ? "y" : "ies");
+    }
+
+    // 2) Delete any "<modid>.old" folders in active sdcafiine paths
+    //    (leftover from a crashed atomic-rename swap).
+    std::vector<std::string> bases = { Paths::sdcafiineBase(), Paths::disabledBase() };
+    for (auto& base : bases) {
+        DIR* td = opendir(base.c_str());
+        if (!td) continue;
+        struct dirent* te;
+        while ((te = readdir(td)) != nullptr) {
+            std::string titleId = te->d_name;
+            if (titleId == "." || titleId == "..") continue;
+            std::string titlePath = base + "/" + titleId;
+            DIR* md = opendir(titlePath.c_str());
+            if (!md) continue;
+            struct dirent* me;
+            while ((me = readdir(md)) != nullptr) {
+                std::string entry = me->d_name;
+                if (entry == "." || entry == "..") continue;
+                if (entry.size() > 4 && entry.substr(entry.size() - 4) == ".old") {
+                    std::string oldPath = titlePath + "/" + entry;
+                    if (DownloadManager::rmrf(oldPath))
+                        LOG_INFO("CacheManager: removed stale .old: %s", oldPath.c_str());
+                }
+            }
+            closedir(md);
+        }
+        closedir(td);
+    }
 }
 
 void CacheManager::cleanupCorruptMods() {

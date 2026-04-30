@@ -1,6 +1,7 @@
 #include "DownloadManager.h"
 #include "mods/ZipExtractor.h"
 #include "util/Logger.h"
+#include "util/sha256.h"
 
 #include <curl/curl.h>
 #include <sys/stat.h>
@@ -109,9 +110,21 @@ bool DownloadManager::download(const std::string& zipUrl, const std::string& tmp
     size_t slash = tmpPath.rfind('/');
     if (slash != std::string::npos) mkdirp(tmpPath.substr(0, slash));
 
-    FILE* f = fopen(tmpPath.c_str(), "wb");
+    // Resume support: download to tmpPath + ".partial", rename on success.
+    // If a .partial exists from a previous attempt, use HTTP Range to continue.
+    std::string partialPath = tmpPath + ".partial";
+    long resumeFrom = 0;
+    {
+        struct stat st;
+        if (stat(partialPath.c_str(), &st) == 0 && st.st_size > 0) {
+            resumeFrom = (long)st.st_size;
+            LOG_INFO("DownloadManager: resuming from %ld bytes", resumeFrom);
+        }
+    }
+
+    FILE* f = fopen(partialPath.c_str(), resumeFrom > 0 ? "ab" : "wb");
     if (!f) {
-        m_error = "Cannot create temp file: " + tmpPath;
+        m_error = "Cannot create temp file: " + partialPath;
         return false;
     }
 
@@ -136,6 +149,9 @@ bool DownloadManager::download(const std::string& zipUrl, const std::string& tmp
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curlProgress);
     curl_easy_setopt(curl, CURLOPT_XFERINFODATA,     this);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS,       0L);
+    if (resumeFrom > 0) {
+        curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, (curl_off_t)resumeFrom);
+    }
 
     CURLcode res = curl_easy_perform(curl);
     long httpCode = 0;
@@ -144,13 +160,19 @@ bool DownloadManager::download(const std::string& zipUrl, const std::string& tmp
     fclose(f);
 
     if (res != CURLE_OK) {
-        remove(tmpPath.c_str());
+        // Don't delete .partial -- next retry can resume from what we got
         m_error = std::string("Download failed: ") + curl_easy_strerror(res);
         return false;
     }
     if (httpCode >= 400) {
-        remove(tmpPath.c_str());
+        // 4xx is permanent (file gone, auth) -- discard partial
+        remove(partialPath.c_str());
         m_error = "HTTP error: " + std::to_string(httpCode);
+        return false;
+    }
+    // Atomically rename .partial -> .zip
+    if (rename(partialPath.c_str(), tmpPath.c_str()) != 0) {
+        m_error = "Cannot finalize download (rename .partial failed)";
         return false;
     }
     return true;
@@ -199,16 +221,51 @@ void DownloadManager::run(const std::string& zipUrl,
         return;
     }
 
-    // Extract
+    // SHA-256 verification (opt-in via Mod.sha256 in repo)
+    if (!m_expectedHash.empty()) {
+        m_state = State::Verifying;
+        m_progress = 0.0f;
+        LOG_INFO("DownloadManager: verifying SHA-256 (%zu bytes expected)",
+                 m_expectedHash.size());
+        if (!sha256VerifyFile(tmpPath, m_expectedHash)) {
+            std::string actual = sha256HexFile(tmpPath);
+            LOG_ERROR("DownloadManager: SHA-256 mismatch: expected=%s actual=%s",
+                      m_expectedHash.c_str(), actual.c_str());
+            remove(tmpPath.c_str());
+            m_error = "Hash mismatch (file corrupted or tampered)";
+            m_state = State::Error;
+            return;
+        }
+        LOG_INFO("DownloadManager: SHA-256 OK");
+    }
+
+    // Atomic extract: extract into a staging dir under cache, then rename
+    // into the active sdcafiine path. If extract fails, the active path is
+    // never touched — no half-installed mod can be picked up by SDCafiine.
     m_state    = State::Extracting;
     m_progress = 0.0f;
 
-    mkdirp(destDir);
+    // Derive a staging path adjacent to tmpPath. tmpPath is "<cache>/<modid>.zip"
+    // → stagingPath is "<cache>/staging/<modid>".
+    std::string modId;
+    std::string cacheRoot;
+    {
+        size_t slash = tmpPath.rfind('/');
+        cacheRoot = (slash != std::string::npos) ? tmpPath.substr(0, slash) : ".";
+        std::string base = (slash != std::string::npos) ? tmpPath.substr(slash + 1) : tmpPath;
+        // Strip ".zip"
+        size_t dot = base.rfind(".zip");
+        modId = (dot != std::string::npos) ? base.substr(0, dot) : base;
+    }
+    std::string stagingPath = cacheRoot + "/staging/" + modId;
 
-    if (!ZipExtractor::extract(tmpPath, destDir)) {
-        // Cleanup partial extract
+    // Pre-clean any leftover staging from a previous failed run
+    rmrf(stagingPath);
+    mkdirp(stagingPath);
+
+    if (!ZipExtractor::extract(tmpPath, stagingPath)) {
+        rmrf(stagingPath);
         remove(tmpPath.c_str());
-        rmrf(destDir);
         m_error = "Failed to extract ZIP";
         m_state = State::Error;
         return;
@@ -217,7 +274,7 @@ void DownloadManager::run(const std::string& zipUrl,
     // Verify extract produced at least one file
     {
         int fileCount = 0;
-        DIR* d = opendir(destDir.c_str());
+        DIR* d = opendir(stagingPath.c_str());
         if (d) {
             struct dirent* e;
             while ((e = readdir(d)) != nullptr) {
@@ -227,13 +284,50 @@ void DownloadManager::run(const std::string& zipUrl,
             closedir(d);
         }
         if (fileCount == 0) {
-            rmrf(destDir);
+            rmrf(stagingPath);
+            remove(tmpPath.c_str());
             m_error = "Extract produced no files";
             m_state = State::Error;
             return;
         }
     }
 
+    // Ensure parent of destDir exists (sdcafiine/<titleId>/)
+    {
+        size_t slash = destDir.rfind('/');
+        if (slash != std::string::npos) mkdirp(destDir.substr(0, slash));
+    }
+
+    // Two-phase swap if destDir already exists (re-install / update)
+    std::string oldPath = destDir + ".old";
+    rmrf(oldPath); // any stale .old from prior aborted swap
+    struct stat st;
+    bool destExists = (stat(destDir.c_str(), &st) == 0);
+    if (destExists) {
+        if (rename(destDir.c_str(), oldPath.c_str()) != 0) {
+            LOG_ERROR("DownloadManager: cannot rename existing %s -> .old", destDir.c_str());
+            rmrf(stagingPath);
+            remove(tmpPath.c_str());
+            m_error = "Cannot replace existing mod folder";
+            m_state = State::Error;
+            return;
+        }
+    }
+
+    if (rename(stagingPath.c_str(), destDir.c_str()) != 0) {
+        LOG_ERROR("DownloadManager: rename staging -> active failed (%s -> %s)",
+                  stagingPath.c_str(), destDir.c_str());
+        // Try to roll back .old if we created one
+        if (destExists) rename(oldPath.c_str(), destDir.c_str());
+        rmrf(stagingPath);
+        remove(tmpPath.c_str());
+        m_error = "Cannot move mod to active folder";
+        m_state = State::Error;
+        return;
+    }
+
+    // Successful swap — discard the old version and the zip
+    if (destExists) rmrf(oldPath);
     remove(tmpPath.c_str());
     m_progress = 1.0f;
     m_state    = State::Done;

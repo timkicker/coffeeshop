@@ -78,6 +78,11 @@ void DownloadScreen::render(SDL_Renderer* renderer) {
         std::string pct = std::to_string((int)(progress * 100)) + "%";
         if (m_fontSmall)
             renderText(renderer, pct, W/2 - 18, 188, accent, m_fontSmall);
+    } else if (state == DownloadManager::State::Verifying) {
+        if (m_fontNormal)
+            renderText(renderer, "Verifying...", W/2 - 90, 110, yellow, m_fontNormal);
+        if (m_fontSmall)
+            renderText(renderer, "Checking SHA-256", W/2 - 80, 145, grey, m_fontSmall);
     } else if (state == DownloadManager::State::Extracting) {
         if (m_fontNormal)
             renderText(renderer, "Installing...", W/2 - 90, 110, grey, m_fontNormal);

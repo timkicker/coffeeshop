@@ -4,6 +4,8 @@
 
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utime.h>
+#include <ctime>
 #include <fstream>
 #include <cstdio>
 #include <dirent.h>
@@ -160,6 +162,107 @@ TEST_CASE("CacheManager::cleanupCorruptMods - mixed corrupt and intact", "[cache
 
     REQUIRE(exists(ok));
     REQUIRE_FALSE(exists(corrupt));
+}
+
+// ─── cleanupStalePartials ─────────────────────────────────────────────────
+
+TEST_CASE("CacheManager::cleanupStalePartials - missing cache dir is no-op",
+          "[cache]") {
+    Fixture fx;
+    CacheManager::cleanupStalePartials(); // should not crash
+}
+
+TEST_CASE("CacheManager::cleanupStalePartials - removes old .partial files",
+          "[cache]") {
+    Fixture fx;
+    auto cacheDir = Paths::cacheDir();
+    mkdirs(cacheDir);
+    std::string oldPartial = cacheDir + "/old-mod.zip.partial";
+    touch(oldPartial);
+    // Backdate to 2 days ago
+    struct utimbuf t;
+    t.actime = t.modtime = time(nullptr) - 2 * 24 * 60 * 60;
+    utime(oldPartial.c_str(), &t);
+
+    CacheManager::cleanupStalePartials();
+
+    REQUIRE_FALSE(exists(oldPartial));
+}
+
+TEST_CASE("CacheManager::cleanupStalePartials - keeps recent .partial files",
+          "[cache]") {
+    Fixture fx;
+    auto cacheDir = Paths::cacheDir();
+    mkdirs(cacheDir);
+    std::string recent = cacheDir + "/active-mod.zip.partial";
+    touch(recent);
+    // Just-created file -> keep
+
+    CacheManager::cleanupStalePartials();
+
+    REQUIRE(exists(recent));
+}
+
+TEST_CASE("CacheManager::cleanupStalePartials - leaves non-.partial alone",
+          "[cache]") {
+    Fixture fx;
+    auto cacheDir = Paths::cacheDir();
+    mkdirs(cacheDir);
+    touch(cacheDir + "/keep.zip");
+    touch(cacheDir + "/keep.txt");
+
+    CacheManager::cleanupStalePartials();
+
+    REQUIRE(exists(cacheDir + "/keep.zip"));
+    REQUIRE(exists(cacheDir + "/keep.txt"));
+}
+
+// ─── cleanupStaleStaging ──────────────────────────────────────────────────
+
+TEST_CASE("CacheManager::cleanupStaleStaging - missing staging dir is no-op", "[cache]") {
+    Fixture fx;
+    CacheManager::cleanupStaleStaging(); // should not crash
+}
+
+TEST_CASE("CacheManager::cleanupStaleStaging - removes leftover staging entries",
+          "[cache]") {
+    Fixture fx;
+    std::string stale1 = Paths::stagingDir() + "/leftover-mod-a";
+    std::string stale2 = Paths::stagingDir() + "/leftover-mod-b";
+    mkdirs(stale1);
+    mkdirs(stale2);
+    touch(stale1 + "/file.szs");
+    touch(stale2 + "/modinfo.json");
+
+    CacheManager::cleanupStaleStaging();
+
+    REQUIRE_FALSE(exists(stale1));
+    REQUIRE_FALSE(exists(stale2));
+}
+
+TEST_CASE("CacheManager::cleanupStaleStaging - removes .old in active path",
+          "[cache]") {
+    Fixture fx;
+    std::string oldDir = Paths::sdcafiineBase() + "/0005000010101000/my-mod.old";
+    mkdirs(oldDir);
+    touch(oldDir + "/file.szs");
+
+    CacheManager::cleanupStaleStaging();
+
+    REQUIRE_FALSE(exists(oldDir));
+}
+
+TEST_CASE("CacheManager::cleanupStaleStaging - leaves non-.old entries alone",
+          "[cache]") {
+    Fixture fx;
+    std::string keep = Paths::sdcafiineBase() + "/0005000010101000/normal-mod";
+    mkdirs(keep);
+    touch(keep + "/modinfo.json");
+
+    CacheManager::cleanupStaleStaging();
+
+    REQUIRE(exists(keep));
+    REQUIRE(exists(keep + "/modinfo.json"));
 }
 
 TEST_CASE("CacheManager::cleanupCorruptMods - also cleans disabled folder", "[cache]") {

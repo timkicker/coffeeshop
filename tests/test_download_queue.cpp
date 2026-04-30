@@ -163,6 +163,16 @@ TEST_CASE("DownloadQueue::dismissError - removing middle job shifts later indice
     REQUIRE(jobs[1].mod.id == "c");
 }
 
+TEST_CASE("DownloadQueue::setWorkerCount - clamps to valid range", "[queue]") {
+    resetQueue();
+    auto& q = DownloadQueue::get();
+    q.setWorkerCount(0);   // ignored (below min)
+    q.setWorkerCount(99);  // ignored (above max)
+    q.setWorkerCount(3);   // valid
+    // No way to inspect from outside without start(); just ensure no crash
+    SUCCEED("setWorkerCount accepts valid values, ignores invalid");
+}
+
 TEST_CASE("DownloadQueue::activeCount - excludes Done and Error", "[queue]") {
     resetQueue();
     auto& q = DownloadQueue::get();

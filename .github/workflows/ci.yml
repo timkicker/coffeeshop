@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  # Native unit tests on Ubuntu — pure C++ logic, no Wii U toolchain needed.
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: |
+          mkdir -p tests/build
+          cd tests/build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build & run tests
+        run: |
+          cd tests/build
+          make -j$(nproc)
+          ./cupstore_tests
+
+  # Cross-build for both target modes. A regression in either
+  # (e.g. a bug behind #if BUILD_HW) is caught here before merge.
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitppc:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [cemu, hw]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (${{ matrix.mode }})
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/wut/share/wut.toolchain.cmake \
+            -DBUILD_MODE=${{ matrix.mode }} \
+            -DAPP_VERSION=0.0.0-ci
+          make -j$(nproc)
+
+      - name: Verify wuhb produced
+        run: |
+          test -s build/wiiu_mod_store.wuhb
+          ls -la build/wiiu_mod_store.wuhb
+
+      - name: Upload artifact
+        if: matrix.mode == 'hw' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiiu_mod_store-${{ matrix.mode }}-${{ github.sha }}
+          path: build/wiiu_mod_store.wuhb
+          retention-days: 14

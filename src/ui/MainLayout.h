@@ -8,6 +8,7 @@
 #include <SDL2/SDL_ttf.h>
 #include <string>
 #include <map>
+#include <set>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -75,6 +76,9 @@ private:
 
     enum class SortMode { Default, NameAZ, Version };
     SortMode m_sortMode = SortMode::Default;
+
+    // Tag filter (Y-button toggles overlay)
+    std::set<std::string> m_activeTags;
 
     // Installed state
     std::vector<InstalledMod> m_installedMods;

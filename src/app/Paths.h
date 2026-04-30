@@ -25,6 +25,13 @@ namespace Paths {
         return modstoreBase() + "/cache";
     }
 
+    // Mods are extracted here first, then atomically renamed into the active
+    // sdcafiine path. Failed extracts never leave half-installed mods in the
+    // active path.
+    inline std::string stagingDir() {
+        return cacheDir() + "/staging";
+    }
+
     inline std::string configFile() {
 #if BUILD_HW
         return modstoreBase() + "/config.json";  // SD card

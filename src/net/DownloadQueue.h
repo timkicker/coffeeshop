@@ -68,8 +68,12 @@ private:
     std::vector<DownloadJob> m_jobs;
     std::mutex               m_mutex;
     std::condition_variable  m_cv;
-    std::thread              m_worker;
+    std::vector<std::thread> m_workers;
+    int                      m_workerCount { 2 }; // default 2 parallel slots
     std::atomic<bool>        m_running { false };
 
     static constexpr int CLEANUP_SECONDS = 30;
+
+public:
+    void setWorkerCount(int n) { if (n >= 1 && n <= 8) m_workerCount = n; }
 };

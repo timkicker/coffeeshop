@@ -24,6 +24,7 @@ struct Mod {
     std::vector<std::string> requirements;  // e.g. ["60fps patch"]
     std::vector<std::string> tags;          // e.g. ["course", "skin"]
     uint64_t                 fileSize = 0;  // bytes, 0 = unknown
+    std::string              sha256;        // optional 64-char hex; verified post-download
 };
 
 struct Game {
@@ -55,6 +56,10 @@ public:
     // Testable: parse a single game JSON object into a Game struct
     // Returns empty optional if required fields are missing or all mods are invalid
     static std::optional<Game> parseGameFromJson(const std::string& json);
+
+    // Aggregate all unique tags across all mods in all games of this repo.
+    // Returned in descending frequency order (most-used tags first).
+    static std::vector<std::string> aggregateTags(const Repo& repo);
 
 private:
     void parseGame(const std::string& json);

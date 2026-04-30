@@ -112,6 +112,8 @@ bool App::init() {
     pushScreen(std::make_unique<MainLayout>(this));
     elog("after pushScreen");
     CacheManager::cleanupStaleZips();
+    CacheManager::cleanupStalePartials();
+    CacheManager::cleanupStaleStaging();
     CacheManager::cleanupCorruptMods();
     DownloadQueue::get().start();
     ImageCache::get().start();

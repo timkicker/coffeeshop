@@ -8,8 +8,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/timkicker/coffeeshop/actions">
-    <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/timkicker/coffeeshop/release.yml?label=build">
+  <a href="https://github.com/timkicker/coffeeshop/actions/workflows/ci.yml">
+    <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/timkicker/coffeeshop/ci.yml?branch=main&label=ci">
   </a>
   <a href="https://github.com/timkicker/coffeeshop/releases/latest">
     <img alt="Release" src="https://img.shields.io/github/v/release/timkicker/coffeeshop?display_name=tag&sort=semver">

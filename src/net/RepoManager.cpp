@@ -207,6 +207,7 @@ std::optional<Game> RepoManager::parseGameFromJson(const std::string& json) {
             mod.releaseDate = jm.value("releaseDate", "");
             mod.changelog   = jm.value("changelog", "");
             mod.license     = jm.value("license", "");
+            mod.sha256      = jm.value("sha256", "");
             
             // fileSize with type check and bounds validation
             if (jm.contains("fileSize") && jm["fileSize"].is_number()) {
@@ -232,6 +233,32 @@ std::optional<Game> RepoManager::parseGameFromJson(const std::string& json) {
     }
 }
 
+
+std::vector<std::string> RepoManager::aggregateTags(const Repo& repo) {
+    // Count occurrences across all mods
+    std::vector<std::pair<std::string, int>> counts;
+    auto bump = [&](const std::string& tag) {
+        for (auto& p : counts) {
+            if (p.first == tag) { p.second++; return; }
+        }
+        counts.emplace_back(tag, 1);
+    };
+    for (auto& g : repo.games)
+        for (auto& m : g.mods)
+            for (auto& t : m.tags)
+                if (!t.empty()) bump(t);
+
+    // Sort by count desc, then alphabetically for stable ordering
+    std::sort(counts.begin(), counts.end(),
+        [](const auto& a, const auto& b) {
+            if (a.second != b.second) return a.second > b.second;
+            return a.first < b.first;
+        });
+    std::vector<std::string> out;
+    out.reserve(counts.size());
+    for (auto& p : counts) out.push_back(p.first);
+    return out;
+}
 
 void RepoManager::parseGame(const std::string& json) {
     try {

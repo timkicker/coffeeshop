@@ -2,6 +2,7 @@
 #include "app/App.h"
 #include "ui/DetailScreen.h"
 #include "ui/DownloadQueueScreen.h"
+#include "ui/TagFilterScreen.h"
 #include "net/DownloadQueue.h"
 #include <sysapp/launch.h>
 #include "mods/InstalledScanner.h"
@@ -180,6 +181,25 @@ void MainLayout::handleBrowseInput(const Input& input) {
         const auto& game = games[m_selectedGame];
         m_app->pushScreen(std::make_unique<DetailScreen>(
             m_app, game.mods[m_selectedMod], game.name, game.titleIds));
+    }
+
+    // X cycles sort mode
+    if (input.x) {
+        m_sortMode = (m_sortMode == SortMode::Default)  ? SortMode::NameAZ
+                   : (m_sortMode == SortMode::NameAZ)   ? SortMode::Version
+                                                        : SortMode::Default;
+        AudioManager::get().playSound(SoundId::Navigate);
+    }
+
+    // Y opens tag filter overlay
+    if (input.y) {
+        auto tags = RepoManager::aggregateTags(m_repo);
+        m_app->pushScreen(std::make_unique<TagFilterScreen>(
+            m_app, std::move(tags), m_activeTags,
+            [this](std::set<std::string> picked) {
+                m_activeTags = std::move(picked);
+                m_selectedMod = 0; // reset cursor when filter changes
+            }));
     }
 }
 
@@ -489,8 +509,24 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         gx += pillW + 8;
     }
 
-    // Cards - sorted copy
-    std::vector<Mod> sortedMods = games[m_selectedGame].mods;
+    // Cards - filtered + sorted copy.
+    // 1) tag filter: if any tags are selected, show only mods with at least
+    //    one matching tag.
+    std::vector<Mod> sortedMods;
+    sortedMods.reserve(games[m_selectedGame].mods.size());
+    for (auto& m : games[m_selectedGame].mods) {
+        if (m_activeTags.empty()) {
+            sortedMods.push_back(m);
+        } else {
+            for (auto& t : m.tags) {
+                if (m_activeTags.count(t)) {
+                    sortedMods.push_back(m);
+                    break;
+                }
+            }
+        }
+    }
+    // 2) sort
     switch (m_sortMode) {
         case SortMode::NameAZ:
             std::sort(sortedMods.begin(), sortedMods.end(),
@@ -580,9 +616,12 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         const char* sortLabel = m_sortMode == SortMode::NameAZ ? "Sort: Name A-Z"
                               : m_sortMode == SortMode::Version ? "Sort: Version"
                               : "Sort: Default";
-        renderText(renderer, "D-Pad: navigate   A: details   L/R: game   ZL/ZR: sort   +: downloads",
+        renderText(renderer, "D-Pad   A: details   L/R: game   X: sort   Y: filter   +: downloads",
                    cx+10, H-22, {70,70,95,255}, m_fontTiny);
-        renderText(renderer, sortLabel, W-160, H-22, {100,160,100,255}, m_fontTiny);
+        std::string status = sortLabel;
+        if (!m_activeTags.empty())
+            status = std::string("Filter: ") + std::to_string((int)m_activeTags.size()) + " tag(s) | " + sortLabel;
+        renderText(renderer, status, W-260, H-22, {100,160,100,255}, m_fontTiny);
     }
 }
 

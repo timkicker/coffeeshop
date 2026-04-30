@@ -93,6 +93,7 @@ TEST_CASE("parseGameFromJson - optional fields parsed correctly", "[repo]") {
     j["mods"][0]["tags"]        = {"skin", "music"};
     j["mods"][0]["requirements"] = {"60fps patch"};
     j["mods"][0]["changelog"]   = "1.0.0 - Initial release";
+    j["mods"][0]["sha256"]      = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
     j["icon"]                   = "https://example.com/icon.png";
 
     auto result = RepoManager::parseGameFromJson(j.dump());
@@ -105,7 +106,58 @@ TEST_CASE("parseGameFromJson - optional fields parsed correctly", "[repo]") {
     REQUIRE(mod.tags[0]      == "skin");
     REQUIRE(mod.requirements.size() == 1);
     REQUIRE(mod.changelog    == "1.0.0 - Initial release");
+    REQUIRE(mod.sha256.size() == 64);
     REQUIRE(result->icon     == "https://example.com/icon.png");
+}
+
+TEST_CASE("parseGameFromJson - missing sha256 field defaults to empty", "[repo]") {
+    auto result = RepoManager::parseGameFromJson(validGame().dump());
+    REQUIRE(result.has_value());
+    REQUIRE(result->mods[0].sha256.empty());
+}
+
+// ─── aggregateTags ───────────────────────────────────────────────────────
+
+TEST_CASE("aggregateTags - empty repo returns empty list", "[tags]") {
+    Repo r;
+    auto tags = RepoManager::aggregateTags(r);
+    REQUIRE(tags.empty());
+}
+
+TEST_CASE("aggregateTags - returns unique tags sorted by frequency", "[tags]") {
+    Repo r;
+    Game g;
+    auto mod = [](const std::vector<std::string>& tags) {
+        Mod m;
+        m.id = "m"; m.name = "m"; m.version = "1.0";
+        m.download = "https://x.com/m.zip";
+        m.tags = tags;
+        return m;
+    };
+    g.name = "Game";
+    g.mods.push_back(mod({"skin", "music"}));
+    g.mods.push_back(mod({"skin", "course"}));
+    g.mods.push_back(mod({"skin"}));
+    r.games.push_back(g);
+
+    auto tags = RepoManager::aggregateTags(r);
+    // skin (3) > course (1) == music (1); ties broken alphabetically
+    REQUIRE(tags.size() == 3);
+    REQUIRE(tags[0] == "skin");
+    REQUIRE(tags[1] == "course");
+    REQUIRE(tags[2] == "music");
+}
+
+TEST_CASE("aggregateTags - skips empty tag strings", "[tags]") {
+    Repo r;
+    Game g;
+    Mod m; m.id = "m"; m.name = "m"; m.version = "1.0"; m.download = "https://x.com/m.zip";
+    m.tags = {"valid", "", "another"};
+    g.mods.push_back(m);
+    r.games.push_back(g);
+
+    auto tags = RepoManager::aggregateTags(r);
+    REQUIRE(tags.size() == 2);
 }
 
 TEST_CASE("parseGameFromJson - one valid and one invalid mod", "[repo]") {
