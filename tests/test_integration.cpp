@@ -102,12 +102,14 @@ struct Fixture {
         rmTree(root);
         mkdirs(root);
         Paths::testRootOverride = root;
+        InstalledScanner::invalidate();
         CurlMock::reset();
     }
     ~Fixture() {
         Paths::testRootOverride.clear();
         CurlMock::reset();
         rmTree(root);
+        InstalledScanner::invalidate();
     }
 };
 

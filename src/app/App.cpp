@@ -1,4 +1,5 @@
 extern void elog(const char* msg);
+extern void elogf(const char* fmt, ...);
 #include "App.h"
 #include "app/Input.h"
 #include "app/Config.h"
@@ -35,8 +36,8 @@ App::~App() {
     DownloadQueue::get().stop();
     elog("~App: clearing screens");
     m_screens.clear();
-    elog("~App: ImageCache clear");
-    if (m_renderer) ImageCache::get().clear(m_renderer);
+    elog("~App: ImageCache shutdown");
+    if (m_renderer) ImageCache::get().shutdown(m_renderer);
     elog("~App: TextCache clear");
     TextCache::get().clear();
     elog("~App: DestroyRenderer");
@@ -81,6 +82,7 @@ bool App::init() {
     }
     elog("IMG_Init OK");
 
+    elogf("requesting window %dx%d", m_screenW, m_screenH);
     m_window = SDL_CreateWindow(
         "Wii U Mod Store",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -89,21 +91,42 @@ bool App::init() {
     );
     if (!m_window) {
         LOG_ERROR("SDL_CreateWindow failed: %s", SDL_GetError());
+        elogf("SDL_CreateWindow failed: %s", SDL_GetError());
         return false;
     }
-    elog("Window OK");
+    int wW, wH;
+    SDL_GetWindowSize(m_window, &wW, &wH);
+    elogf("Window OK: actual size %dx%d (requested %dx%d)", wW, wH, m_screenW, m_screenH);
 
     m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED);
     if (!m_renderer) {
+        elogf("ACCELERATED renderer failed: %s -- trying SOFTWARE", SDL_GetError());
+        m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_SOFTWARE);
+    }
+    if (!m_renderer) {
         LOG_ERROR("SDL_CreateRenderer failed: %s", SDL_GetError());
+        elogf("SDL_CreateRenderer failed entirely: %s", SDL_GetError());
         return false;
     }
-    elog("Renderer OK");
+    SDL_RendererInfo info;
+    if (SDL_GetRendererInfo(m_renderer, &info) == 0) {
+        elogf("Renderer OK: '%s' flags=0x%x maxTex=%dx%d",
+              info.name ? info.name : "?",
+              info.flags, info.max_texture_width, info.max_texture_height);
+    } else {
+        elog("Renderer OK (info query failed)");
+    }
+    int rW, rH;
+    SDL_GetRendererOutputSize(m_renderer, &rW, &rH);
+    elogf("Renderer output size: %dx%d", rW, rH);
 
     elog("before logger");
     if (mkdir((Paths::modstoreBase()).c_str(), 0755) != 0 && errno != EEXIST) {
         elog("mkdir for app dir failed - logger may not work");
     }
+    // Pre-create the disabled-mods folder so InstalledScanner doesn't log
+    // "opendir failed" on every scan() when nothing has been deactivated yet.
+    mkdir(Paths::disabledBase().c_str(), 0755);
     elog("mkdir done");
     Logger::get().init(Paths::modstoreBase() + "/app.log");
     elog("logger init done");
@@ -111,12 +134,28 @@ bool App::init() {
     elog("before pushScreen");
     pushScreen(std::make_unique<MainLayout>(this));
     elog("after pushScreen");
+    elog("cleanupStaleZips...");
     CacheManager::cleanupStaleZips();
+    elog("cleanupStalePartials...");
     CacheManager::cleanupStalePartials();
+    elog("cleanupStaleStaging...");
     CacheManager::cleanupStaleStaging();
-    CacheManager::cleanupCorruptMods();
+    // cleanupCorruptMods deliberately not run at startup:
+    //  1. It blocks boot for minutes on real hardware -- rmrf on a large mod
+    //     folder (e.g. hundreds of custom-track files) takes too long on SD.
+    //  2. It silently deletes user data (any folder lacking modinfo.json)
+    //     which is hostile to mods installed manually outside the app.
+    // InstalledScanner already handles missing modinfo.json gracefully.
+    // If we ever want this back, it should be a manual Settings action with
+    // confirmation, not a startup auto-delete.
+    elog("DownloadQueue::start (2 workers)...");
+    DownloadQueue::get().setWorkerCount(2);
     DownloadQueue::get().start();
+    elog("DownloadQueue started");
+    elog("ImageCache::start...");
     ImageCache::get().start();
+    elog("ImageCache started");
+    elog("App::init returning true");
 
     return true;
 }
@@ -124,17 +163,48 @@ bool App::init() {
 void App::run() {
     m_running = true;
     int pruneCounter = 0;
+    int frameNum = 0;
+    elogf("App::run entering -- screens=%zu running=%d procRunning=%d",
+          m_screens.size(), (int)m_running,
+#ifdef __WUT__
+          (int)WHBProcIsRunning()
+#else
+          1
+#endif
+    );
+
     while (m_running && !m_screens.empty() && WHBProcIsRunning()) {
+        if (frameNum < 10 || frameNum % 60 == 0) {
+            elogf("frame %d begin", frameNum);
+        }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) m_running = false;
+            if (event.type == SDL_QUIT) {
+                elog("got SDL_QUIT");
+                m_running = false;
+            }
         }
+        if (frameNum < 5) elog("  before update");
         update();
+        if (frameNum < 5) elog("  after update");
         render();
+        if (frameNum < 5) elogf("  after render (sdl_err='%s')", SDL_GetError());
         TextCache::get().tick();
-        // Prune unused text textures every ~5 seconds (at 60fps).
-        if (++pruneCounter > 300) { TextCache::get().prune(); pruneCounter = 0; }
+        if (++pruneCounter > 300) {
+            TextCache::get().prune();
+            pruneCounter = 0;
+            elogf("frame %d: pruned text cache", frameNum);
+        }
+        frameNum++;
     }
+    elogf("App::run loop exited -- frames=%d running=%d screens=%zu procRunning=%d",
+          frameNum, (int)m_running, m_screens.size(),
+#ifdef __WUT__
+          (int)WHBProcIsRunning()
+#else
+          1
+#endif
+    );
 #ifdef __WUT__
     // Drain ProcUI until Aroma confirms exit - required for WHBProcShutdown to work
     while (WHBProcIsRunning()) {}
@@ -174,10 +244,30 @@ void App::update() {
 }
 
 void App::render() {
-    SDL_SetRenderDrawColor(m_renderer, 15, 15, 25, 255);
-    SDL_RenderClear(m_renderer);
+    static int s_renderCount = 0;
+    bool diag = (s_renderCount < 3);
+    if (diag) elogf("App::render #%d -- renderer=%p screens=%zu",
+                    s_renderCount, (void*)m_renderer, m_screens.size());
+    if (!m_renderer) { if (diag) elog("  renderer is NULL!"); return; }
+
+    // Clear stale SDL error so per-frame elog doesn't carry forward an
+    // unrelated message (e.g. "Not a PNG" from a one-time IMG_Load_RW failure
+    // that propagates across hundreds of frames).
+    SDL_ClearError();
+
+    int rc = SDL_SetRenderDrawColor(m_renderer, 15, 15, 25, 255);
+    if (diag) elogf("  SetDrawColor=%d err='%s'", rc, SDL_GetError());
+    rc = SDL_RenderClear(m_renderer);
+    if (diag) elogf("  RenderClear=%d err='%s'", rc, SDL_GetError());
+
     if (!m_screens.empty()) {
+        if (diag) elog("  calling screen->render");
         m_screens.back()->render(m_renderer);
+        if (diag) elogf("  screen->render returned err='%s'", SDL_GetError());
+    } else {
+        if (diag) elog("  m_screens empty, skipping screen render");
     }
     SDL_RenderPresent(m_renderer);
+    if (diag) elogf("  RenderPresent returned err='%s'", SDL_GetError());
+    s_renderCount++;
 }

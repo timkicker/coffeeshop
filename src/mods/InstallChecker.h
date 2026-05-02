@@ -6,6 +6,7 @@ struct InstallStatus {
     bool        installed        = false;
     bool        updateAvail      = false;
     std::string installedVersion;
+    std::string installedAt;      // from modinfo.json (e.g. "Apr 21 2026"), empty if unknown
     std::string titleId;          // which titleId folder it's installed under
 };
 

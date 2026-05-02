@@ -37,4 +37,11 @@ private:
     TTF_Font* m_fontNormal = nullptr;
     TTF_Font* m_fontSmall  = nullptr;
     TTF_Font* m_fontTiny   = nullptr;
+
+    // Defer-load: 0 = freshly entered (one render of "Loading..."),
+    // 1 = ready to do heavy work in next update, 2 = loaded.
+    // The intermediate state forces at least one render before the freeze, so
+    // the user sees feedback instead of the prior screen freezing.
+    int  m_loadStage = 0;
+    bool m_loaded    = false;
 };

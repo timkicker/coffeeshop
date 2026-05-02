@@ -16,6 +16,7 @@
 #include "util/ImageCache.h"
 #include "audio/AudioManager.h"
 extern void elog(const char* msg);
+extern void elogf(const char* fmt, ...);
 
 static constexpr const char* FONT_PATH = "/vol/content/fonts/Roboto-Regular.ttf";
 static constexpr int CARDS_PER_ROW = 3;
@@ -40,13 +41,23 @@ MainLayout::~MainLayout() {
 }
 
 void MainLayout::onEnter() {
-    elog("onEnter start");
+    elogf("onEnter start -- font path: %s", FONT_PATH);
     m_fontNormal = TTF_OpenFont(FONT_PATH, 26);
     m_fontSmall  = TTF_OpenFont(FONT_PATH, 18);
     m_fontTiny   = TTF_OpenFont(FONT_PATH, 14);
-    elog("fonts done");
+    elogf("fonts done: normal=%p small=%p tiny=%p (TTF err='%s')",
+          (void*)m_fontNormal, (void*)m_fontSmall, (void*)m_fontTiny, TTF_GetError());
     m_config.load();
     m_showOnboarding = !m_config.hasRepos();
+    // Restore persisted UI state
+    if      (m_config.sortMode == "name")    m_sortMode = SortMode::NameAZ;
+    else if (m_config.sortMode == "version") m_sortMode = SortMode::Version;
+    else                                      m_sortMode = SortMode::Default;
+    m_activeTags.clear();
+    for (auto& t : m_config.activeTags) m_activeTags.insert(t);
+    if      (m_config.lastTab == "installed") m_activeTab = Tab::Installed;
+    else if (m_config.lastTab == "settings")  m_activeTab = Tab::Settings;
+    else                                       m_activeTab = Tab::Browse;
     if (!m_showOnboarding && !m_config.repos.empty()) {
         m_fetchState = FetchState::Loading;
         elog("config done");
@@ -55,8 +66,23 @@ void MainLayout::onEnter() {
             Repo combined;
             std::string lastError;
 
+            int totalRepos = (int)m_config.repos.size();
+            int repoIdx    = 0;
             for (auto& url : m_config.repos) {
                 if (m_stopFetch) break;
+                repoIdx++;
+                {
+                    std::lock_guard<std::mutex> sl(m_repoMutex);
+                    // Show short host portion in progress label
+                    size_t hostStart = url.find("://");
+                    hostStart = (hostStart == std::string::npos) ? 0 : hostStart + 3;
+                    size_t hostEnd = url.find('/', hostStart);
+                    std::string host = url.substr(hostStart,
+                                                   hostEnd == std::string::npos ? url.size() - hostStart
+                                                                                : hostEnd - hostStart);
+                    m_fetchProgress = std::to_string(repoIdx) + "/" +
+                                      std::to_string(totalRepos) + "  " + host;
+                }
                 LOG_INFO("Processing repo: %s", url.c_str());
                 RepoManager rm;
                 rm.fetch(url, &m_stopFetch);
@@ -94,6 +120,17 @@ void MainLayout::onEnter() {
 }
 
 void MainLayout::onExit() {}
+
+void MainLayout::persistUiState() {
+    m_config.sortMode = (m_sortMode == SortMode::NameAZ) ? "name"
+                      : (m_sortMode == SortMode::Version) ? "version"
+                                                          : "default";
+    m_config.lastTab = (m_activeTab == Tab::Installed) ? "installed"
+                     : (m_activeTab == Tab::Settings)  ? "settings"
+                                                        : "browse";
+    m_config.activeTags.assign(m_activeTags.begin(), m_activeTags.end());
+    m_config.save();
+}
 
 void MainLayout::refreshInstalled() {
     m_installedMods = InstalledScanner::scan();
@@ -137,12 +174,16 @@ void MainLayout::handleInput(const Input& input) {
     }
 
     if (input.l) {
+        Tab before = m_activeTab;
         if      (m_activeTab == Tab::Installed) { m_activeTab = Tab::Browse;    AudioManager::get().playSound(SoundId::Navigate); }
         else if (m_activeTab == Tab::Settings)  { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
+        if (before != m_activeTab) persistUiState();
     }
     if (input.r) {
+        Tab before = m_activeTab;
         if      (m_activeTab == Tab::Browse)    { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
         else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Settings;  m_settingsDirty = true; AudioManager::get().playSound(SoundId::Navigate); }
+        if (before != m_activeTab) persistUiState();
     }
 
     if (m_activeTab == Tab::Browse)    handleBrowseInput(input);
@@ -176,6 +217,14 @@ void MainLayout::handleBrowseInput(const Input& input) {
     if (input.down) { int n = m_selectedMod + cols; if (n < modCount) { m_selectedMod = n; AudioManager::get().playSound(SoundId::Navigate); } }
     if (input.up)   { int p = m_selectedMod - cols; if (p >= 0)       { m_selectedMod = p; AudioManager::get().playSound(SoundId::Navigate); } }
 
+    // Pre-warm ImageCache for the currently-selected mod's images. When the
+    // user presses A, DetailScreen finds them already cached -> no freeze.
+    if (m_selectedMod < modCount) {
+        const Mod& sel = games[m_selectedGame].mods[m_selectedMod];
+        if (!sel.thumbnail.empty()) ImageCache::get().request(sel.thumbnail);
+        for (auto& s : sel.screenshots) ImageCache::get().request(s);
+    }
+
     if (input.a && !mods.empty()) {
         AudioManager::get().playSound(SoundId::Navigate);
         const auto& game = games[m_selectedGame];
@@ -189,6 +238,7 @@ void MainLayout::handleBrowseInput(const Input& input) {
                    : (m_sortMode == SortMode::NameAZ)   ? SortMode::Version
                                                         : SortMode::Default;
         AudioManager::get().playSound(SoundId::Navigate);
+        persistUiState();
     }
 
     // Y opens tag filter overlay
@@ -199,12 +249,43 @@ void MainLayout::handleBrowseInput(const Input& input) {
             [this](std::set<std::string> picked) {
                 m_activeTags = std::move(picked);
                 m_selectedMod = 0; // reset cursor when filter changes
+                persistUiState();
             }));
     }
 }
 
 void MainLayout::handleInstalledInput(const Input& input) {
     if (m_installedMods.empty()) return;
+
+    // Update-all confirmation dialog
+    if (m_confirmUpdateAll) {
+        if (input.a) {
+            // Enqueue downloads for every mod that has an update available.
+            // Match by mod.id within the cached repo.
+            std::lock_guard<std::mutex> lock(m_repoMutex);
+            int queued = 0;
+            for (auto& inst : m_installedMods) {
+                if (!InstalledScanner::hasUpdate(inst)) continue;
+                for (auto& g : m_repo.games) {
+                    bool found = false;
+                    for (auto& mod : g.mods) {
+                        if (mod.id == inst.id) {
+                            DownloadQueue::get().enqueue(mod, inst.titleId);
+                            queued++;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+            }
+            LOG_INFO("Update-all: enqueued %d updates", queued);
+            AudioManager::get().playSound(SoundId::DownloadStart);
+            m_confirmUpdateAll = false;
+        }
+        if (input.b) m_confirmUpdateAll = false;
+        return;
+    }
 
     // Conflict warning dialog
     if (m_showConflict) {
@@ -280,6 +361,16 @@ void MainLayout::handleInstalledInput(const Input& input) {
             m_installedDirty = true;
         }
     }
+    // ZR -> "Update all" confirmation
+    if (input.zr) {
+        int updateCount = 0;
+        for (auto& m : m_installedMods)
+            if (InstalledScanner::hasUpdate(m)) updateCount++;
+        if (updateCount > 0) {
+            m_confirmUpdateAll = true;
+            AudioManager::get().playSound(SoundId::Navigate);
+        }
+    }
     if (input.y) {
         m_confirmUninstall = true;
     }
@@ -310,6 +401,15 @@ void MainLayout::update() {
             AudioManager::get().playMusicFadeIn(t, 3000);
         }
     }
+    // Detect mutations from other screens (e.g. DetailScreen uninstall) by
+    // comparing the InstalledScanner generation counter. This avoids stale
+    // "ON" badges on the Browse cards when the cache was invalidated outside
+    // our own action paths.
+    unsigned gen = InstalledScanner::generation();
+    if (gen != m_lastInstalledGen) {
+        m_lastInstalledGen = gen;
+        m_installedDirty   = true;
+    }
     if (m_installedDirty)
         refreshInstalled();
     if (m_settingsDirty) {
@@ -319,6 +419,15 @@ void MainLayout::update() {
 }
 
 void MainLayout::render(SDL_Renderer* renderer) {
+    static int s_mlCount = 0;
+    bool diag = (s_mlCount < 3);
+    if (diag) {
+        elogf("ML::render #%d -- showOnboarding=%d activeTab=%d games=%zu fonts(N=%p,S=%p,T=%p)",
+              s_mlCount, (int)m_showOnboarding, (int)m_activeTab,
+              m_repo.games.size(),
+              (void*)m_fontNormal, (void*)m_fontSmall, (void*)m_fontTiny);
+    }
+    s_mlCount++;
     if (m_showStartupConflicts && !m_startupConflicts.empty()) {
         const int W = m_app->screenWidth();
         const int H = m_app->screenHeight();
@@ -405,7 +514,7 @@ void MainLayout::renderSidebar(SDL_Renderer* renderer) {
     SDL_Color grey = {80, 80, 105, 255};
     if (m_fontTiny) {
         renderText(renderer, "Minus: exit",       12, H-62, grey, m_fontTiny);
-        renderText(renderer, "Y: downloads",    12, H-26, grey, m_fontTiny);
+        renderText(renderer, "+: downloads",    12, H-26, grey, m_fontTiny);
         renderText(renderer, "L/R: switch tab", 12, H-44, grey, m_fontTiny);
     }
 }
@@ -423,6 +532,8 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
 
     if (m_fetchState == FetchState::Loading) {
         if (m_fontNormal) renderText(renderer, "Loading repository...", cx+20, 60, {150,150,170,255}, m_fontNormal);
+        if (m_fontSmall && !m_fetchProgress.empty())
+            renderText(renderer, m_fetchProgress, cx+20, 95, {110,140,170,255}, m_fontSmall);
         return;
     }
     if (m_fetchState == FetchState::Error) {
@@ -433,7 +544,16 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
 
     auto& games = m_repo.games;
     if (games.empty()) {
-        if (m_fontNormal) renderText(renderer, "No mods found.", cx+20, 60, {150,150,170,255}, m_fontNormal);
+        if (m_fontNormal)
+            renderText(renderer, "No mods in this repo.", cx+20, 80, {180,180,200,255}, m_fontNormal);
+        if (m_fontSmall) {
+            renderText(renderer, "Either the repo is empty or every game was filtered out.",
+                       cx+20, 116, {130,130,160,255}, m_fontSmall);
+            renderText(renderer, "Add another repo URL in config.json (Settings tab),",
+                       cx+20, 138, {130,130,160,255}, m_fontSmall);
+            renderText(renderer, "or check the repo URL is reachable.",
+                       cx+20, 158, {130,130,160,255}, m_fontSmall);
+        }
         return;
     }
 
@@ -472,8 +592,19 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
             if (iconTex) iconW = 24;
         }
 
+        // Count installed mods for this game's titleIds
+        int installedHere = 0;
+        for (auto& inst : m_installedMods) {
+            for (auto& tid : games[i].titleIds) {
+                if (inst.titleId == tid) { installedHere++; break; }
+            }
+        }
+        std::string label = games[i].name;
+        if (installedHere > 0)
+            label += " (" + std::to_string(installedHere) + ")";
+
         int tw = 0;
-        if (m_fontSmall) TTF_SizeText(m_fontSmall, games[i].name.c_str(), &tw, nullptr);
+        if (m_fontSmall) TTF_SizeText(m_fontSmall, label.c_str(), &tw, nullptr);
         int pillW = tw + 20 + iconW;
 
         // Colors: installed=blue-primary, other=dark-secondary
@@ -503,7 +634,7 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         }
 
         if (m_fontSmall)
-            renderText(renderer, games[i].name, textX, 14,
+            renderText(renderer, label, textX, 14,
                        sel ? SDL_Color{255,255,255,255} : SDL_Color{180,180,210,255}, m_fontSmall);
 
         gx += pillW + 8;
@@ -636,9 +767,11 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
 
     if (m_installedMods.empty()) {
         if (m_fontNormal)
-            renderText(renderer, "No mods installed.", cx, 60, {150,150,170,255}, m_fontNormal);
-        if (m_fontTiny)
-            renderText(renderer, "X: refresh", cx, 90, {70,70,95,255}, m_fontTiny);
+            renderText(renderer, "Nothing installed yet.", cx, 80, {180,180,200,255}, m_fontNormal);
+        if (m_fontSmall) {
+            renderText(renderer, "Press L to switch to Browse and install your first mod.",
+                       cx, 116, {130,130,160,255}, m_fontSmall);
+        }
         return;
     }
 
@@ -688,7 +821,13 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
     // Bottom hints
     if (m_fontTiny) {
         SDL_Color grey = {70, 70, 95, 255};
-        renderText(renderer, "A: details   X: toggle   Y: uninstall", cx, H-22, grey, m_fontTiny);
+        int updateCount = 0;
+        for (auto& m : m_installedMods)
+            if (InstalledScanner::hasUpdate(m)) updateCount++;
+        std::string hint = "A: details   X: toggle   Y: uninstall";
+        if (updateCount > 0)
+            hint += "   ZR: update all (" + std::to_string(updateCount) + ")";
+        renderText(renderer, hint, cx, H-22, grey, m_fontTiny);
     }
 
     // Conflict warning overlay
@@ -751,6 +890,37 @@ void MainLayout::renderInstalled(SDL_Renderer* renderer) {
         if (m_fontNormal) {
             renderText(renderer, "A: Confirm",  W/2-140, H/2+16, {220,70,70,255},   m_fontNormal);
             renderText(renderer, "B: Cancel",   W/2+20,  H/2+16, {130,130,160,255}, m_fontNormal);
+        }
+    }
+
+    // Confirm update-all overlay
+    if (m_confirmUpdateAll) {
+        int updateCount = 0;
+        for (auto& m : m_installedMods)
+            if (InstalledScanner::hasUpdate(m)) updateCount++;
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
+        SDL_Rect overlay = {0, 0, W, H};
+        SDL_RenderFillRect(renderer, &overlay);
+
+        SDL_SetRenderDrawColor(renderer, 18, 28, 38, 255);
+        SDL_Rect card = {W/2-240, H/2-80, 480, 160};
+        SDL_RenderFillRect(renderer, &card);
+        SDL_SetRenderDrawColor(renderer, 80, 180, 255, 255);
+        SDL_RenderDrawRect(renderer, &card);
+
+        if (m_fontNormal) {
+            std::string title = "Update " + std::to_string(updateCount) +
+                                (updateCount == 1 ? " mod?" : " mods?");
+            renderText(renderer, title, W/2-200, H/2-58, {255,255,255,255}, m_fontNormal);
+        }
+        if (m_fontSmall) {
+            renderText(renderer, "All mods with available updates will be enqueued.",
+                       W/2-200, H/2-24, {180,200,220,255}, m_fontSmall);
+        }
+        if (m_fontNormal) {
+            renderText(renderer, "A: Update all", W/2-180, H/2+24, {80,180,255,255},   m_fontNormal);
+            renderText(renderer, "B: Cancel",     W/2+40,  H/2+24, {130,130,160,255},  m_fontNormal);
         }
     }
 }
@@ -816,6 +986,7 @@ std::vector<SItem> MainLayout::buildSettingsItems(const Config& cfg,
     info("Total cache",  fmtSz(szDir(Paths::cacheDir())));
     button("Clear image cache");
     button("Clear all cache");
+    button("Find corrupt mod folders");
 
     header("Logs");
     info("Log file", Logger::get().path().empty() ? "Not initialized" : Logger::get().path());
@@ -841,7 +1012,7 @@ std::vector<SItem> MainLayout::buildSettingsItems(const Config& cfg,
 void MainLayout::handleSettingsInput(const Input& input) {
     // Log viewer
     if (m_showLog) {
-        auto& lines = Logger::get().lines();
+        auto lines = Logger::get().lines();
         if (input.up)   m_logScroll = std::max(0, m_logScroll - 1);
         if (input.down) m_logScroll = std::min(std::max(0,(int)lines.size()-20), m_logScroll+1);
         if (input.b)    m_showLog = false;
@@ -899,6 +1070,42 @@ void MainLayout::handleSettingsInput(const Input& input) {
             LOG_INFO("Settings: full cache cleared");
             m_settingsDirty = true;
         }
+        else if (label == "Find corrupt mod folders") {
+            // Scan-only first: list folders without modinfo.json so the user
+            // can confirm before any delete happens. Replaces the old
+            // boot-time auto-cleanup that was hostile to manually-installed
+            // mods and hung on hardware (large rmrf).
+            std::vector<std::string> corrupt;
+            std::vector<std::string> bases = { Paths::sdcafiineBase(), Paths::disabledBase() };
+            for (auto& base : bases) {
+                DIR* td = opendir(base.c_str());
+                if (!td) continue;
+                struct dirent* te;
+                while ((te = readdir(td)) != nullptr) {
+                    std::string tid = te->d_name;
+                    if (tid == "." || tid == "..") continue;
+                    std::string tpath = base + "/" + tid;
+                    DIR* md = opendir(tpath.c_str());
+                    if (!md) continue;
+                    struct dirent* me;
+                    while ((me = readdir(md)) != nullptr) {
+                        std::string mid = me->d_name;
+                        if (mid == "." || mid == "..") continue;
+                        std::string mpath = tpath + "/" + mid;
+                        struct stat st;
+                        if (stat((mpath + "/modinfo.json").c_str(), &st) != 0)
+                            corrupt.push_back(tid + "/" + mid);
+                    }
+                    closedir(md);
+                }
+                closedir(td);
+            }
+            // Show count to user as a transient log line. A future iteration
+            // can push a dedicated screen with per-folder confirmation.
+            LOG_INFO("Settings: found %zu folders without modinfo.json", corrupt.size());
+            for (auto& c : corrupt) LOG_INFO("  candidate: %s", c.c_str());
+            // For now: no delete. User reviews via "View log".
+        }
         else if (label == "View log") {
             m_showLog   = true;
             m_logScroll = std::max(0,(int)Logger::get().lines().size()-20);
@@ -924,7 +1131,7 @@ void MainLayout::renderSettings(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer, 25, 25, 40, 255);
         SDL_Rect logBg = {SIDEBAR_W+10, 40, VW+10, H-50};
         SDL_RenderFillRect(renderer, &logBg);
-        auto& lines = Logger::get().lines();
+        auto lines = Logger::get().lines();
         int vis = (H - 60) / 16;
         int y = 46;
         for (int i = m_logScroll; i < (int)lines.size() && i < m_logScroll+vis; i++) {

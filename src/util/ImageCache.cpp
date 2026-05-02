@@ -172,12 +172,22 @@ SDL_Texture* ImageCache::texture(const std::string& url, SDL_Renderer* renderer)
     return e.tex;
 }
 
-void ImageCache::clear(SDL_Renderer* renderer) {
-    stop();
+void ImageCache::clear(SDL_Renderer*) {
+    // NOTE: deliberately does NOT stop the worker -- a mid-app cache clear
+    // (e.g. Settings -> "Clear image cache") should leave the cache able
+    // to refill itself on the next render. App::~App calls shutdown()
+    // instead for the final teardown.
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& pair : m_cache) {
         if (pair.second.tex)
             SDL_DestroyTexture(pair.second.tex);
     }
     m_cache.clear();
+    // Drop any pending requests too -- new ones will be re-queued by the UI.
+    while (!m_queue.empty()) m_queue.pop();
+}
+
+void ImageCache::shutdown(SDL_Renderer* renderer) {
+    stop();
+    clear(renderer);
 }

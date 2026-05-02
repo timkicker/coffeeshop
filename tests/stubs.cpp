@@ -6,6 +6,12 @@ std::string Paths::testRootOverride;
 
 // curl stubs are provided by curl_mock.cpp (real-ish behavior driven by tests)
 
+// elog/elogf are defined in main.cpp -- not compiled in tests. Provide no-op
+// stubs so production code that calls them links cleanly.
+#include <cstdarg>
+void elog(const char*) {}
+void elogf(const char*, ...) {}
+
 // SDL/TTF stubs -- TextCache.cpp pulls these symbols in but the tests only
 // exercise null-renderer/empty-text paths that bail before any real SDL work.
 extern "C" {

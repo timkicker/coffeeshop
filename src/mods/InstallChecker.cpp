@@ -35,6 +35,8 @@ InstallStatus InstallChecker::check(const std::string& modId,
                     f >> j;
                     if (j.contains("version"))
                         status.installedVersion = j["version"].get<std::string>();
+                    if (j.contains("installedAt"))
+                        status.installedAt = j["installedAt"].get<std::string>();
                 } catch (...) {
                     LOG_WARN("InstallChecker: failed to parse modinfo.json for %s", modId.c_str());
                 }

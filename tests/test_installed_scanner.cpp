@@ -55,10 +55,12 @@ struct Fixture {
         rmTree(root);
         mkdirs(root);
         Paths::testRootOverride = root;
+        InstalledScanner::invalidate();
     }
     ~Fixture() {
         Paths::testRootOverride.clear();
         rmTree(root);
+        InstalledScanner::invalidate();
     }
 
     void installActive(const std::string& titleId, const std::string& modId,
@@ -124,6 +126,36 @@ TEST_CASE("InstalledScanner::scan - empty filesystem returns empty list", "[scan
     Fixture fx;
     auto mods = InstalledScanner::scan();
     REQUIRE(mods.empty());
+}
+
+TEST_CASE("InstalledScanner::scan - filters non-titleId folders", "[scan]") {
+    Fixture fx;
+    // Junk folders that aren't valid Wii U title IDs (16 hex chars)
+    fx.installActive("backup",                 "junk-mod", "1.0");
+    fx.installActive("u",                      "junk-mod", "1.0");
+    fx.installActive("not-a-title-id-folder",  "junk-mod", "1.0");
+    fx.installActive("0005000010101000",       "real-mod", "1.0"); // valid
+
+    auto mods = InstalledScanner::scan();
+    REQUIRE(mods.size() == 1);
+    REQUIRE(mods[0].id == "real-mod");
+    REQUIRE(mods[0].titleId == "0005000010101000");
+}
+
+TEST_CASE("InstalledScanner::scan - cache returns same data on repeat", "[scan][cache]") {
+    Fixture fx;
+    fx.installActive("0005000010101000", "first-mod", "1.0");
+    auto mods1 = InstalledScanner::scan();
+    REQUIRE(mods1.size() == 1);
+
+    // Add a new mod to disk WITHOUT invalidating
+    fx.installActive("0005000010101000", "second-mod", "1.0");
+    auto mods2 = InstalledScanner::scan();
+    REQUIRE(mods2.size() == 1); // cache returns stale data, count unchanged
+
+    InstalledScanner::invalidate();
+    auto mods3 = InstalledScanner::scan();
+    REQUIRE(mods3.size() == 2); // after invalidate, fresh scan
 }
 
 TEST_CASE("InstalledScanner::scan - finds active mod", "[scan]") {

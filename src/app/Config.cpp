@@ -23,7 +23,14 @@ bool Config::loadFrom(const std::string& path) {
             for (auto& r : j["repos"])
                 if (r.is_string()) repos.push_back(r.get<std::string>());
         musicTrack = j.value("musicTrack", "off");
-        LOG_INFO("Config loaded, %zu repo(s)", repos.size());
+        sortMode   = j.value("sortMode",   "default");
+        lastTab    = j.value("lastTab",    "browse");
+        activeTags.clear();
+        if (j.contains("activeTags") && j["activeTags"].is_array())
+            for (auto& t : j["activeTags"])
+                if (t.is_string()) activeTags.push_back(t.get<std::string>());
+        LOG_INFO("Config loaded, %zu repo(s), %zu active tag(s), sort=%s tab=%s",
+                 repos.size(), activeTags.size(), sortMode.c_str(), lastTab.c_str());
         return true;
     } catch (const std::exception& e) {
         LOG_ERROR("Config parse error: %s", e.what());
@@ -33,8 +40,11 @@ bool Config::loadFrom(const std::string& path) {
 
 bool Config::saveTo(const std::string& path) {
     nlohmann::json j;
-    j["repos"] = repos;
+    j["repos"]      = repos;
     j["musicTrack"] = musicTrack;
+    j["sortMode"]   = sortMode;
+    j["lastTab"]    = lastTab;
+    j["activeTags"] = activeTags;
 
     std::ofstream f(path);
     if (!f.is_open()) {

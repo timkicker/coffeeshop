@@ -7,6 +7,11 @@ struct Config {
     std::vector<std::string> repos;
     std::string musicTrack = "off";
 
+    // UI preferences -- persisted across launches.
+    std::string sortMode      = "default";  // "default", "name", "version"
+    std::vector<std::string> activeTags;    // last selected browse-tag filter
+    std::string lastTab       = "browse";   // "browse", "installed", "settings"
+
     bool hasRepos() const { return !repos.empty(); }
     bool load();
     bool save();

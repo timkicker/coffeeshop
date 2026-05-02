@@ -59,6 +59,8 @@ private:
     enum class Tab { Browse, Installed, Settings };
     Tab m_activeTab = Tab::Browse;
 
+    void persistUiState(); // saves sortMode/activeTags/lastTab to Config
+
     Config m_config;
     bool   m_showOnboarding = false;
 
@@ -66,6 +68,7 @@ private:
     enum class FetchState { Idle, Loading, Done, Error };
     std::atomic<FetchState> m_fetchState { FetchState::Idle };
     std::string             m_fetchError;
+    std::string             m_fetchProgress; // e.g. "2/5 example.com/repo.json"
     std::map<std::string, std::string> m_repoStatus; // url -> "OK" or error msg
     std::thread             m_fetchThread;
     std::atomic<bool>       m_stopFetch { false };
@@ -84,7 +87,9 @@ private:
     std::vector<InstalledMod> m_installedMods;
     int                       m_selectedInstalled = 0;
     bool                      m_installedDirty    = true;
+    unsigned                  m_lastInstalledGen  = 0; // tracks InstalledScanner::generation()
     bool                      m_confirmUninstall  = false;
+    bool                      m_confirmUpdateAll  = false;
     bool                      m_showConflict      = false;
     ConflictResult            m_conflictResult;
     bool                      m_showStartupConflicts = false;

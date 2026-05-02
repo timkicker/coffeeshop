@@ -95,6 +95,20 @@ static std::vector<std::string> listDirs(const std::string& path) {
     return result;
 }
 
+// Wii U title IDs are exactly 16 hex chars. Anything else under sdcafiine/
+// is junk left by other apps or manual user folders -- skip so they don't
+// pollute the installed-mods list.
+static bool isValidTitleId(const std::string& s) {
+    if (s.size() != 16) return false;
+    for (char c : s) {
+        bool hex = (c >= '0' && c <= '9') ||
+                   (c >= 'a' && c <= 'f') ||
+                   (c >= 'A' && c <= 'F');
+        if (!hex) return false;
+    }
+    return true;
+}
+
 static InstalledMod readMod(const std::string& basePath,
                              const std::string& titleId,
                              const std::string& modId,
@@ -111,39 +125,71 @@ static InstalledMod readMod(const std::string& basePath,
         try {
             nlohmann::json j;
             f >> j;
-            if (j.contains("version")) mod.version = j["version"].get<std::string>();
-            if (j.contains("id"))      mod.name    = j["id"].get<std::string>();
+            if (j.contains("version"))     mod.version     = j["version"].get<std::string>();
+            if (j.contains("id"))          mod.name        = j["id"].get<std::string>();
+            if (j.contains("installedAt")) mod.installedAt = j["installedAt"].get<std::string>();
         } catch (...) {}
     }
     return mod;
 }
 
-std::vector<InstalledMod> InstalledScanner::scan() {
-    LOG_INFO("InstalledScanner::scan() start");
+// Cache state. All access goes through s_cacheMutex because invalidate()
+// is called from DownloadQueue worker threads while the UI thread reads.
+#include <mutex>
+static std::mutex                s_cacheMutex;
+static std::vector<InstalledMod> s_cache;
+static bool                      s_cacheValid = false;
+static unsigned                  s_generation = 0; // bumped on every invalidate
+
+std::vector<InstalledMod> InstalledScanner::doScan() {
+    LOG_INFO("InstalledScanner::doScan() start");
     std::vector<InstalledMod> result;
-    
+
     std::string activeBase = Paths::sdcafiineBase();
-    LOG_INFO("Scanning active mods in: %s", activeBase.c_str());
+    int skipped = 0;
     for (auto& titleId : listDirs(activeBase)) {
-        LOG_INFO("Active titleId: %s", titleId.c_str());
-        for (auto& modId : listDirs(activeBase + "/" + titleId)) {
-            LOG_INFO("Active mod: %s/%s", titleId.c_str(), modId.c_str());
+        if (!isValidTitleId(titleId)) { skipped++; continue; }
+        for (auto& modId : listDirs(activeBase + "/" + titleId))
             result.push_back(readMod(activeBase, titleId, modId, true));
-        }
     }
 
     std::string disabledBase = Paths::disabledBase();
-    LOG_INFO("Scanning disabled mods in: %s", disabledBase.c_str());
     for (auto& titleId : listDirs(disabledBase)) {
-        LOG_INFO("Disabled titleId: %s", titleId.c_str());
-        for (auto& modId : listDirs(disabledBase + "/" + titleId)) {
-            LOG_INFO("Disabled mod: %s/%s", titleId.c_str(), modId.c_str());
+        if (!isValidTitleId(titleId)) { skipped++; continue; }
+        for (auto& modId : listDirs(disabledBase + "/" + titleId))
             result.push_back(readMod(disabledBase, titleId, modId, false));
-        }
     }
-    
-    LOG_INFO("InstalledScanner::scan() done: %zu mods", result.size());
+
+    LOG_INFO("InstalledScanner::doScan() done: %zu mods (%d non-titleid folders skipped)",
+             result.size(), skipped);
     return result;
+}
+
+std::vector<InstalledMod> InstalledScanner::scan() {
+    // Fast path: check cache validity under lock, return copy.
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        if (s_cacheValid) return s_cache; // copy
+    }
+    // Slow path: rebuild without holding the lock (doScan does I/O).
+    auto fresh = doScan();
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        s_cache      = std::move(fresh);
+        s_cacheValid = true;
+        return s_cache; // copy
+    }
+}
+
+void InstalledScanner::invalidate() {
+    std::lock_guard<std::mutex> lock(s_cacheMutex);
+    s_cacheValid = false;
+    s_generation++;
+}
+
+unsigned InstalledScanner::generation() {
+    std::lock_guard<std::mutex> lock(s_cacheMutex);
+    return s_generation;
 }
 
 bool InstalledScanner::setActive(InstalledMod& mod, bool active) {
@@ -174,11 +220,14 @@ bool InstalledScanner::setActive(InstalledMod& mod, bool active) {
     mod.active = active;
     mod.path   = dst;
     LOG_INFO("InstalledScanner: %s -> %s", mod.id.c_str(), active ? "active" : "disabled");
+    invalidate();
     return true;
 }
 
 bool InstalledScanner::remove(const InstalledMod& mod) {
-    return rmrf(mod.path);
+    bool ok = rmrf(mod.path);
+    if (ok) invalidate();
+    return ok;
 }
 
 bool InstalledScanner::hasUpdate(const InstalledMod& mod) {

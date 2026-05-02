@@ -33,8 +33,14 @@ public:
     // Creates SDL_Texture on first call after data is ready (must be called from main thread).
     SDL_Texture* texture(const std::string& url, SDL_Renderer* renderer);
 
-    // Free all textures and stop worker (call before SDL_DestroyRenderer)
+    // Free all textures and clear cached entries. Keeps the worker alive so
+    // subsequent request() calls still get serviced (used from Settings ->
+    // "Clear cache"). Pass renderer for symmetry; not currently used.
     void clear(SDL_Renderer* renderer);
+
+    // Full shutdown: clear() + stop worker + free SDL textures. Call ONLY
+    // from App::~App, before SDL_DestroyRenderer.
+    void shutdown(SDL_Renderer* renderer);
 
 private:
     ImageCache() = default;

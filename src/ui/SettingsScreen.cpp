@@ -144,7 +144,7 @@ void SettingsScreen::buildItems() {
 void SettingsScreen::handleInput(const Input& input) {
     // Log viewer mode
     if (m_showLog) {
-        auto& lines = Logger::get().lines();
+        auto lines = Logger::get().lines();
         if (input.up)   m_logScroll = std::max(0, m_logScroll - 1);
         if (input.down) m_logScroll = std::min(std::max(0, (int)lines.size() - 20), m_logScroll + 1);
         if (input.b)    m_showLog = false;
@@ -309,7 +309,7 @@ void SettingsScreen::render(SDL_Renderer* renderer) {
         SDL_Rect logBg = {SIDEBAR_W+10, 55, W-SIDEBAR_W-20, H-65};
         SDL_RenderFillRect(renderer, &logBg);
 
-        auto& lines = Logger::get().lines();
+        auto lines = Logger::get().lines();
         int visibleLines = (H - 80) / 16;
         int y = 60;
         for (int i = m_logScroll; i < (int)lines.size() && i < m_logScroll + visibleLines; i++) {

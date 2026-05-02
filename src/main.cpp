@@ -4,10 +4,12 @@
 #include "app/App.h"
 #include "app/Paths.h"
 #include "util/Logger.h"
+#include "util/CrashDump.h"
 #include "audio/AudioManager.h"
 #include <whb/log_udp.h>
 #include <cstdio>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #ifdef __WUT__
 #include <sys/iosupport.h>
@@ -22,10 +24,7 @@ extern "C" {
 
 static const char* g_elog_path = nullptr;
 void elog(const char* msg) {
-    // Always send via WHBLog so udplogserver picks it up.
     WHBLogPrintf("[elog] %s", msg);
-    // On Cemu, FILE buffers don't reliably reach the host before kill, even
-    // with fflush+fsync. Reopen+append+close per call is slower but durable.
     if (g_elog_path) {
         FILE* f = fopen(g_elog_path, "a");
         if (f) {
@@ -33,6 +32,17 @@ void elog(const char* msg) {
             fclose(f);
         }
     }
+}
+
+// printf-style elog. Use for any value-bearing diagnostic line.
+#include <cstdarg>
+void elogf(const char* fmt, ...) {
+    char buf[512];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    elog(buf);
 }
 
 int main(int argc, char** argv) {
@@ -75,6 +85,23 @@ int main(int argc, char** argv) {
     }
     elog("START");
     elog(Paths::sdMounted ? "SD mounted" : "SD failed");
+
+    // Crash dump catcher: writes a minimal report on SIGSEGV/etc so users
+    // can attach it to a bug report. Must be installed early but after the
+    // SD mount above so the dump path is writable.
+    static const char* CRASH_PATH = "fs:/vol/external01/wiiu/apps/coffeeshop/crash.log";
+    {
+        // Detect a previous crash before installing fresh handlers.
+        struct stat st;
+        if (stat(CRASH_PATH, &st) == 0) {
+            elog("PREVIOUS RUN CRASHED -- crash.log present. Read it for details.");
+            // Rename to crash.log.prev so we can detect future crashes cleanly.
+            std::string prev = std::string(CRASH_PATH) + ".prev";
+            rename(CRASH_PATH, prev.c_str());
+        }
+    }
+    CrashDump::install(CRASH_PATH);
+    elog("crash handler armed");
 
     elog("before App init");
     {

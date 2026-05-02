@@ -26,24 +26,86 @@ static void mkdirp(const std::string& path) {
     }
 }
 
-bool DownloadManager::rmrf(const std::string& path) {
+extern void elogf(const char* fmt, ...);
+
+#include <set>
+#include <chrono>
+namespace {
+struct DmRmrfKey { dev_t dev; ino_t ino; };
+inline bool operator<(const DmRmrfKey& a, const DmRmrfKey& b) {
+    if (a.dev != b.dev) return a.dev < b.dev;
+    return a.ino < b.ino;
+}
+
+struct DmRmrfState {
+    std::set<DmRmrfKey> visited;
+    std::chrono::steady_clock::time_point deadline;
+    bool                                  timedOut = false;
+};
+
+// 30-second budget per top-level rmrf. Enough for any reasonable mod folder
+// on slow SD; aborts before the user perceives a hang.
+static constexpr int kRmrfBudgetSec = 30;
+
+static bool dm_rmrf_impl(const std::string& path, DmRmrfState& state, int depth) {
+    if (state.timedOut) return false;
+    if (std::chrono::steady_clock::now() > state.deadline) {
+        if (!state.timedOut) {
+            elogf("rmrf: TIMEOUT after %ds at %s -- abort", kRmrfBudgetSec, path.c_str());
+            state.timedOut = true;
+        }
+        return false;
+    }
+    if (depth > 64) {
+        elogf("rmrf: depth>64 at %s -- abort", path.c_str());
+        return false;
+    }
     struct stat st;
-    if (stat(path.c_str(), &st) != 0) return true;
-    if (!S_ISDIR(st.st_mode)) return remove(path.c_str()) == 0;
-
+    if (lstat(path.c_str(), &st) != 0) return true; // already gone
+    if (!S_ISDIR(st.st_mode)) {
+        // file or symlink -- remove without following
+        return remove(path.c_str()) == 0;
+    }
+    DmRmrfKey key{st.st_dev, st.st_ino};
+    if (!state.visited.insert(key).second) {
+        elogf("rmrf: cycle at %s -- abort", path.c_str());
+        return false;
+    }
     DIR* d = opendir(path.c_str());
-    if (!d) return false;
-
+    if (!d) {
+        elogf("rmrf: opendir failed for %s", path.c_str());
+        return false;
+    }
     bool ok = true;
+    int childCount = 0;
     struct dirent* e;
     while ((e = readdir(d)) != nullptr) {
         std::string name = e->d_name;
         if (name == "." || name == "..") continue;
-        if (!rmrf(path + "/" + name)) ok = false;
+        childCount++;
+        if (!dm_rmrf_impl(path + "/" + name, state, depth + 1)) ok = false;
+        if (state.timedOut) break;
     }
     closedir(d);
-    if (rmdir(path.c_str()) != 0) ok = false;
+    if (state.timedOut) return false;
+    if (depth <= 1)
+        elogf("rmrf: %s had %d children", path.c_str(), childCount);
+    if (rmdir(path.c_str()) != 0) {
+        elogf("rmrf: rmdir failed for %s", path.c_str());
+        ok = false;
+    }
     return ok;
+}
+} // namespace
+
+bool DownloadManager::rmrf(const std::string& path) {
+    elogf("rmrf BEGIN %s", path.c_str());
+    DmRmrfState state;
+    state.deadline = std::chrono::steady_clock::now() +
+                     std::chrono::seconds(kRmrfBudgetSec);
+    bool result = dm_rmrf_impl(path, state, 0);
+    elogf("rmrf END %s -> %d (timedOut=%d)", path.c_str(), (int)result, (int)state.timedOut);
+    return result;
 }
 
 static size_t writeFile(char* ptr, size_t size, size_t nmemb, FILE* f) {
@@ -67,9 +129,21 @@ int DownloadManager::curlProgress(void* userdata, curl_off_t total, curl_off_t n
 }
 
 bool DownloadManager::checkDiskSpace(const std::string& dir, uint64_t needed) {
+    // Wii U statvfs doesn't understand the "fs:/" mount prefix. Try the
+    // raw path first, then strip the prefix. If both fail, log once at
+    // INFO level (not WARN -- this is expected on hardware) and proceed.
     struct statvfs sv;
-    if (statvfs(dir.c_str(), &sv) != 0) {
-        LOG_WARN("DownloadManager: statvfs failed for %s, skipping space check", dir.c_str());
+    int rc = statvfs(dir.c_str(), &sv);
+    if (rc != 0 && dir.compare(0, 3, "fs:") == 0) {
+        std::string stripped = dir.substr(3);
+        rc = statvfs(stripped.c_str(), &sv);
+    }
+    if (rc != 0) {
+        static bool warned = false;
+        if (!warned) {
+            LOG_INFO("DownloadManager: statvfs not supported on this platform, skipping disk-space checks");
+            warned = true;
+        }
         return true; // Can't check, assume ok
     }
     uint64_t free = (uint64_t)sv.f_bavail * sv.f_frsize;
@@ -259,8 +333,21 @@ void DownloadManager::run(const std::string& zipUrl,
     }
     std::string stagingPath = cacheRoot + "/staging/" + modId;
 
-    // Pre-clean any leftover staging from a previous failed run
-    rmrf(stagingPath);
+    // Pre-clean any leftover staging from a previous failed run. If the
+    // cleanup fails (rmrf timeout, permission, etc.) we MUST abort -- a
+    // partially-cleaned dir would mix old files with the new ZIP's contents
+    // and silently corrupt the install.
+    {
+        struct stat st;
+        if (stat(stagingPath.c_str(), &st) == 0) {
+            if (!rmrf(stagingPath)) {
+                m_error = "Cannot clean staging directory (previous install left junk)";
+                m_state = State::Error;
+                remove(tmpPath.c_str());
+                return;
+            }
+        }
+    }
     mkdirp(stagingPath);
 
     if (!ZipExtractor::extract(tmpPath, stagingPath)) {
@@ -300,7 +387,18 @@ void DownloadManager::run(const std::string& zipUrl,
 
     // Two-phase swap if destDir already exists (re-install / update)
     std::string oldPath = destDir + ".old";
-    rmrf(oldPath); // any stale .old from prior aborted swap
+    // Clear any stale .old from a prior aborted swap. If this fails, abort
+    // -- otherwise the upcoming rename(destDir -> oldPath) will fail too.
+    {
+        struct stat st;
+        if (stat(oldPath.c_str(), &st) == 0 && !rmrf(oldPath)) {
+            m_error = "Cannot clear stale .old folder before swap";
+            m_state = State::Error;
+            rmrf(stagingPath);
+            remove(tmpPath.c_str());
+            return;
+        }
+    }
     struct stat st;
     bool destExists = (stat(destDir.c_str(), &st) == 0);
     if (destExists) {

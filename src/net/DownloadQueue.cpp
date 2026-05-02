@@ -1,5 +1,6 @@
 #include "DownloadQueue.h"
 #include "net/DownloadManager.h"
+#include "mods/InstalledScanner.h"
 #include "app/Paths.h"
 #include "util/Logger.h"
 
@@ -189,6 +190,8 @@ void DownloadQueue::processJob(int idx, const Mod& mod,
         job.hasFinishedAt = true;
         job.finishedAt   = std::chrono::steady_clock::now();
         LOG_INFO("DownloadQueue: done: %s", mod.name.c_str());
+        // The on-disk mod set just changed; main thread's cached scan is stale.
+        InstalledScanner::invalidate();
     } else {
         job.state        = DownloadJob::State::Error;
         job.error        = cancelFlag->load() ? "Cancelled" : dm.error();

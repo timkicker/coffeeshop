@@ -25,20 +25,17 @@ DetailScreen::~DetailScreen() {
 }
 
 void DetailScreen::onEnter() {
-    m_fontLarge  = TTF_OpenFont(FONT_PATH, 32);
-    m_fontNormal = TTF_OpenFont(FONT_PATH, 22);
-    m_fontSmall  = TTF_OpenFont(FONT_PATH, 17);
-    m_fontTiny   = TTF_OpenFont(FONT_PATH, 13);
-
-    m_installStatus = InstallChecker::check(m_mod.id, m_mod.version, m_titleIds);
-
-    if (!m_mod.thumbnail.empty()) ImageCache::get().request(m_mod.thumbnail);
-    for (auto& s : m_mod.screenshots) ImageCache::get().request(s);
+    // Intentionally empty -- heavy work deferred to first update() so the
+    // screen pushes instantly and the user sees a "Loading..." frame instead
+    // of a UI freeze on the previous screen.
 }
 
 void DetailScreen::onExit() {}
 
 void DetailScreen::handleInput(const Input& input) {
+    // B is always allowed (back out of skeleton-loading state).
+    if (input.b && !m_confirmUninstall) { m_app->popScreen(); return; }
+
     if (m_confirmUninstall) {
         if (input.a) {
             auto mods = InstalledScanner::scan();
@@ -54,7 +51,11 @@ void DetailScreen::handleInput(const Input& input) {
         return;
     }
 
-    if (input.b) { m_app->popScreen(); return; }
+    // Block install/uninstall actions until the deferred load completes.
+    // Without this, A pressed on the loading frame sees the default
+    // m_installStatus (installed=false) and would enqueue a duplicate
+    // install over an already-installed mod.
+    if (!m_loaded) return;
 
     if (input.y && m_installStatus.installed) {
         m_confirmUninstall = true;
@@ -83,7 +84,29 @@ void DetailScreen::handleInput(const Input& input) {
     }
 }
 
-void DetailScreen::update() {}
+void DetailScreen::update() {
+    if (m_loaded) return;
+
+    if (m_loadStage == 0) {
+        // First update tick: skip so the upcoming render shows "Loading..."
+        // before we burn time loading. Two-tick delay keeps the loading
+        // indicator visible for one frame even if the load is fast.
+        m_loadStage = 1;
+        return;
+    }
+    // Second update tick onwards: do the slow stuff.
+    m_fontLarge  = TTF_OpenFont(FONT_PATH, 32);
+    m_fontNormal = TTF_OpenFont(FONT_PATH, 22);
+    m_fontSmall  = TTF_OpenFont(FONT_PATH, 17);
+    m_fontTiny   = TTF_OpenFont(FONT_PATH, 13);
+
+    m_installStatus = InstallChecker::check(m_mod.id, m_mod.version, m_titleIds);
+
+    if (!m_mod.thumbnail.empty()) ImageCache::get().request(m_mod.thumbnail);
+    for (auto& s : m_mod.screenshots) ImageCache::get().request(s);
+
+    m_loaded = true;
+}
 
 void DetailScreen::render(SDL_Renderer* renderer) {
     const int W = m_app->screenWidth();
@@ -93,6 +116,67 @@ void DetailScreen::render(SDL_Renderer* renderer) {
     SDL_Color grey   = {130, 130, 155, 255};
     SDL_Color accent = { 80, 180, 255, 255};
     SDL_Color dim    = { 70,  70,  95, 255};
+
+    // Skeleton placeholder while update() is doing the heavy load work.
+    // Shows the same layout structure (top bar, thumb area, info column)
+    // as dim grey rects so the user sees "where content will be" instead
+    // of a blank screen.
+    if (!m_loaded) {
+        SDL_SetRenderDrawColor(renderer, 12, 12, 20, 255);
+        SDL_Rect fullbg = {0, 0, W, H};
+        SDL_RenderFillRect(renderer, &fullbg);
+
+        // Top bar
+        SDL_SetRenderDrawColor(renderer, 20, 20, 33, 255);
+        SDL_Rect topbar = {0, 0, W, 50};
+        SDL_RenderFillRect(renderer, &topbar);
+        SDL_SetRenderDrawColor(renderer, 45, 45, 65, 255);
+        SDL_RenderDrawLine(renderer, 0, 50, W, 50);
+
+        // Title placeholder bar
+        SDL_SetRenderDrawColor(renderer, 35, 35, 50, 255);
+        SDL_Rect titleBar = {110, 14, 280, 28};
+        SDL_RenderFillRect(renderer, &titleBar);
+
+        // Thumbnail placeholder
+        const int MARGIN  = 24;
+        const int SPLIT   = (int)(W * 0.54f);
+        const int THUMB_W = SPLIT - MARGIN * 2;
+        const int THUMB_H = (int)(THUMB_W * 9.0f / 16.0f);
+        SDL_SetRenderDrawColor(renderer, 25, 25, 42, 255);
+        SDL_Rect thumb = {MARGIN, 62, THUMB_W, THUMB_H};
+        SDL_RenderFillRect(renderer, &thumb);
+        SDL_SetRenderDrawColor(renderer, 48, 48, 72, 255);
+        SDL_RenderDrawRect(renderer, &thumb);
+
+        // Right column placeholder rows
+        const int RX = SPLIT + MARGIN;
+        const int RW = W - RX - MARGIN;
+        SDL_SetRenderDrawColor(renderer, 30, 30, 45, 255);
+        for (int i = 0; i < 6; i++) {
+            SDL_Rect labelRect = {RX, 78 + i * 50,         60, 12};
+            SDL_Rect valueRect = {RX, 78 + i * 50 + 18, RW - 40, 18};
+            SDL_RenderFillRect(renderer, &labelRect);
+            SDL_RenderFillRect(renderer, &valueRect);
+        }
+
+        // Centered "Loading..." label so the user knows it's not stuck.
+        TTF_Font* tmp = TTF_OpenFont(FONT_PATH, 24);
+        if (tmp) {
+            SDL_Surface* s = TTF_RenderUTF8_Blended(tmp, "Loading...", grey);
+            if (s) {
+                SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
+                if (t) {
+                    SDL_Rect dst = {W/2 - s->w/2, H - 80, s->w, s->h};
+                    SDL_RenderCopy(renderer, t, nullptr, &dst);
+                    SDL_DestroyTexture(t);
+                }
+                SDL_FreeSurface(s);
+            }
+            TTF_CloseFont(tmp);
+        }
+        return;
+    }
 
     SDL_SetRenderDrawColor(renderer, 12, 12, 20, 255);
     SDL_Rect fullbg = {0, 0, W, H};
@@ -215,6 +299,11 @@ void DetailScreen::render(SDL_Renderer* renderer) {
                            RX+6, ry+4, white, m_fontTiny);
         }
         ry += 30;
+        if (!m_installStatus.installedAt.empty() && m_fontTiny) {
+            renderText(renderer, "Installed " + m_installStatus.installedAt,
+                       RX, ry, grey, m_fontTiny);
+            ry += 18;
+        }
     }
 
     if (!m_mod.includes.empty()) {
