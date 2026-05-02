@@ -37,12 +37,19 @@
 ## Features
 
 - Browse and install mods from community-hosted repositories
-- Per-game mod list with icons, tags, and metadata
-- Download queue with progress and error recovery
+- Per-game mod list with icons, screenshots, tags, and metadata
+- Tag filtering and sort cycling (Default / Name / Version) on the Browse tab
+- Concurrent download queue with per-job progress, cancel, and error recovery
+- Resumable downloads — interrupted transfers pick up where they left off
+- Optional SHA-256 verification of downloaded archives
+- Atomic install — failed extracts never leave a half-installed mod behind
 - Activate / deactivate mods without uninstalling
-- Conflict detection between active mods
-- Update badges when newer versions are available
-- Settings tab with repo management, cache control, and log viewer
+- Conflict detection between active mods (with file-level diff in the dialog)
+- Update badges and one-press "update all" for installed mods
+- Region picker for games with multiple Title IDs (US/EU/JP)
+- Settings tab with repo management, cache control, and an in-app log viewer
+- Crash dump captured to SD on signal faults for post-mortem debugging
+- UI state (active tab, sort mode, tag filter) persisted across launches
 
 
 
@@ -95,11 +102,13 @@ PRs are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 Branch strategy: `dev` is active development, `main` is stable/released. PRs go to `dev`.
 
-Tests run without devkitPro:
+Tests run without devkitPro (native x86_64 Catch2 build):
 ```bash
 cd tests && mkdir -p build && cd build
-cmake .. && make && ./coffeeshop_tests
+cmake .. && make && ./cupstore_tests
 ```
+
+CI runs the test suite plus a matrix Cemu/hardware cross-build on every push and PR.
 
 
 
