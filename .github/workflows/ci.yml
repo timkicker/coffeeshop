@@ -13,6 +13,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The tests mock libcurl symbols (see tests/curl_mock.cpp), but the
+      # production code under test still includes <curl/curl.h> for the type
+      # definitions. ZLIB is needed by ZipExtractor. zlib1g-dev is usually
+      # pre-installed on ubuntu-latest, but make it explicit so this doesn't
+      # silently break on a future runner image.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev zlib1g-dev
+
       - name: Configure
         run: |
           mkdir -p tests/build

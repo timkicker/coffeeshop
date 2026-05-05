@@ -40,9 +40,9 @@
 - Per-game mod list with icons, screenshots, tags, and metadata
 - Tag filtering and sort cycling (Default / Name / Version) on the Browse tab
 - Concurrent download queue with per-job progress, cancel, and error recovery
-- Resumable downloads — interrupted transfers pick up where they left off
+- Resumable downloads. Interrupted transfers pick up where they left off.
 - Optional SHA-256 verification of downloaded archives
-- Atomic install — failed extracts never leave a half-installed mod behind
+- Atomic install. Failed extracts never leave a half-installed mod behind.
 - Activate / deactivate mods without uninstalling
 - Conflict detection between active mods (with file-level diff in the dialog)
 - Update badges and one-press "update all" for installed mods
@@ -72,8 +72,12 @@ I've also created a [video tutorial on YouTube](https://youtu.be/FF4uRc8NvnI)
 
 ## Hosting your own repo
 
-CoffeeShop loads mods from community-hosted repositories. To host your own:
+CoffeeShop loads mods from community-hosted repositories. Two ways to set one up:
 
+**Easy path (no JSON editing, no command line):**
+Use the [CoffeeShop Repo Builder](https://tim.kicker.dev/coffeeshop-builder/). Click together your repo in the browser, drop ZIPs to compute their SHA-256 automatically, then download a ready-to-publish ZIP. The builder also lets you import an existing `repo.json` URL and edit it.
+
+**Manual path:**
 1. Fork [coffeeshop-repo-template](https://github.com/timkicker/coffeeshop-repo-template)
 2. Add your games and mods following the schema in the template README
 3. Point your `config.json` at your fork's raw `repo.json` URL
