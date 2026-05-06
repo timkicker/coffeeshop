@@ -63,6 +63,7 @@ void DownloadQueue::start() {
 }
 
 void DownloadQueue::stop() {
+    LOG_INFO("DownloadQueue: stop() called, signalling %d worker(s)", (int)m_workers.size());
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         for (auto& j : m_jobs) j.cancel = true;
@@ -71,6 +72,7 @@ void DownloadQueue::stop() {
     m_cv.notify_all();
     for (auto& w : m_workers) if (w.joinable()) w.join();
     m_workers.clear();
+    LOG_INFO("DownloadQueue: stop() done");
 }
 
 void DownloadQueue::cancelJob(int index) {
@@ -78,12 +80,14 @@ void DownloadQueue::cancelJob(int index) {
     if (index >= 0 && index < (int)m_jobs.size()) {
         auto& j = m_jobs[index];
         if (j.state == DownloadJob::State::Pending) {
+            LOG_INFO("DownloadQueue: cancelled pending job '%s'", j.mod.name.c_str());
             j.state        = DownloadJob::State::Error;
             j.error        = "Cancelled";
             j.hasFinishedAt = true;
             j.finishedAt   = std::chrono::steady_clock::now();
         } else if (j.state == DownloadJob::State::Downloading ||
                    j.state == DownloadJob::State::Extracting) {
+            LOG_INFO("DownloadQueue: cancel flag set on active job '%s'", j.mod.name.c_str());
             j.cancel = true;
         }
     }
@@ -162,8 +166,10 @@ void DownloadQueue::workerLoop() {
             jobCancel  = &m_jobs[pendingIdx].cancel;
         }
 
+        LOG_INFO("DownloadQueue: starting job '%s' for title %s", jobMod.name.c_str(), jobTitleId.c_str());
         processJob(pendingIdx, jobMod, jobTitleId, jobCancel);
     }
+    LOG_INFO("DownloadQueue: worker exiting");
 }
 
 void DownloadQueue::processJob(int idx, const Mod& mod,

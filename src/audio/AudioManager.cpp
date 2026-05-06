@@ -39,7 +39,11 @@ void AudioManager::init() {
 }
 
 void AudioManager::shutdown() {
-    if (!m_initialized) return;
+    if (!m_initialized) {
+        LOG_INFO("AudioManager::shutdown: already shut down, skipping");
+        return;
+    }
+    LOG_INFO("AudioManager::shutdown begin");
     stopMusic();
     for (auto& [id, chunk] : m_sounds) Mix_FreeChunk(chunk);
     m_sounds.clear();
@@ -50,6 +54,7 @@ void AudioManager::shutdown() {
     Mix_CloseAudio();
     Mix_Quit();
     m_initialized = false;
+    LOG_INFO("AudioManager::shutdown done");
 }
 
 void AudioManager::playSound(SoundId id) {

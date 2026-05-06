@@ -19,6 +19,8 @@ extern void elogf(const char* fmt, ...);
 #include <SDL2/SDL.h>
 #include <whb/proc.h>
 #include <proc_ui/procui.h>
+#include <coreinit/thread.h>
+#include <coreinit/time.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL_image.h>
 
@@ -32,6 +34,11 @@ extern "C" {
 App::App() = default;
 
 App::~App() {
+    // Standard SDL2-on-Wii-U teardown order. SDL_Quit() internally drives
+    // SYSLaunchMenu + ProcUIProcessMessages drain + ProcUIShutdown via its
+    // WIIU_VideoQuit handler (because we let SDL_Init claim ProcUI in
+    // main() by NOT calling WHBProcInit). No custom ProcUI bookkeeping
+    // needed on our side.
     elog("~App: DownloadQueue stop");
     DownloadQueue::get().stop();
     elog("~App: clearing screens");
@@ -48,7 +55,7 @@ App::~App() {
     IMG_Quit();
     elog("~App: TTF_Quit");
     TTF_Quit();
-    elog("~App: SDL_Quit");
+    elog("~App: SDL_Quit (drains ProcUI internally)");
     SDL_Quit();
     elog("~App: done");
 }
@@ -60,10 +67,16 @@ bool App::init() {
     // Without these calls, Cemu's emulated socket layer never finishes
     // setup and curl connect() hangs. The previous BUILD_HW gate broke
     // cemu mode entirely (app stuck on "Loading repos...").
-    nn::ac::Initialize();
-    nn::ac::Connect();
+    {
+        nn::Result r = nn::ac::Initialize();
+        elogf("Network: nn::ac::Initialize -> %s", r.IsSuccess() ? "ok" : "FAILED");
+    }
+    {
+        nn::Result r = nn::ac::Connect();
+        elogf("Network: nn::ac::Connect -> %s", r.IsSuccess() ? "ok" : "FAILED");
+    }
     socket_lib_init();
-    elog("Network ready");
+    elog("Network: socket_lib_init done, network ready");
 #endif
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) != 0) {
@@ -130,7 +143,11 @@ bool App::init() {
     elog("mkdir done");
     Logger::get().init(Paths::modstoreBase() + "/app.log");
     elog("logger init done");
-    LOG_INFO("App started");
+#ifdef APP_VERSION
+    LOG_INFO("App started (CoffeeShop %s)", APP_VERSION);
+#else
+    LOG_INFO("App started (no version define)");
+#endif
     elog("before pushScreen");
     pushScreen(std::make_unique<MainLayout>(this));
     elog("after pushScreen");
@@ -164,19 +181,27 @@ void App::run() {
     m_running = true;
     int pruneCounter = 0;
     int frameNum = 0;
-    elogf("App::run entering -- screens=%zu running=%d procRunning=%d",
-          m_screens.size(), (int)m_running,
-#ifdef __WUT__
-          (int)WHBProcIsRunning()
-#else
-          1
-#endif
-    );
+    elogf("App::run entering -- screens=%zu running=%d", m_screens.size(), (int)m_running);
+    // NOTE: We deliberately do NOT call WHBProcIsRunning() here -- it would
+    // run ProcUIProcessMessages and then ProcUIShutdown() because WHB's
+    // sRunning flag is false (we never called WHBProcInit). That would tear
+    // down ProcUI before we ever rendered a frame. SDL drives ProcUI for
+    // us inside SDL_PollEvent below.
 
-    while (m_running && !m_screens.empty() && WHBProcIsRunning()) {
-        if (frameNum < 10 || frameNum % 60 == 0) {
-            elogf("frame %d begin", frameNum);
-        }
+    // SDL2-wuhb owns the ProcUI lifecycle (we don't call WHBProcInit, so
+    // SDL_Init claims it via ProcUIInitEx and sets handleProcUI=TRUE on
+    // its side). SDL drives ProcUI from WIIU_PumpEvents (called by
+    // SDL_PollEvent below) and fires SDL_QUIT when EXITING is received.
+    // We must NOT use WHBProcIsRunning() as a loop guard: WHB's sRunning
+    // flag is false because we never called WHBProcInit, and the first
+    // WHBProcIsRunning() call would call ProcUIShutdown() and return
+    // false, exiting the loop with 0 frames. Use SDL_QUIT (set via
+    // m_running=false) as the canonical exit trigger instead.
+    while (m_running && !m_screens.empty()) {
+        // Log only the first 10 frames to confirm the loop started cleanly.
+        // Periodic per-second pulses were diagnostic for the HOME-exit hang
+        // and are no longer needed; they'd just bloat early.log.
+        if (frameNum < 10) elogf("frame %d begin", frameNum);
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
@@ -184,42 +209,39 @@ void App::run() {
                 m_running = false;
             }
         }
-        if (frameNum < 5) elog("  before update");
         update();
-        if (frameNum < 5) elog("  after update");
         render();
-        if (frameNum < 5) elogf("  after render (sdl_err='%s')", SDL_GetError());
         TextCache::get().tick();
         if (++pruneCounter > 300) {
             TextCache::get().prune();
             pruneCounter = 0;
-            elogf("frame %d: pruned text cache", frameNum);
         }
         frameNum++;
     }
-    elogf("App::run loop exited -- frames=%d running=%d screens=%zu procRunning=%d",
-          frameNum, (int)m_running, m_screens.size(),
-#ifdef __WUT__
-          (int)WHBProcIsRunning()
-#else
-          1
-#endif
-    );
-#ifdef __WUT__
-    // Drain ProcUI until Aroma confirms exit - required for WHBProcShutdown to work
-    while (WHBProcIsRunning()) {}
-#endif
+    elogf("App::run loop exited -- frames=%d running=%d screens=%zu exiting=%d",
+          frameNum, (int)m_running, m_screens.size(), (int)m_exiting);
+    // No ProcUI drain here. SDL_Quit's WIIU_VideoQuit handles the exit
+    // transition: it calls SYSLaunchMenu, then loops on
+    // ProcUIProcessMessages(TRUE) handling RELEASE_FOREGROUND and exiting
+    // when EXITING is received, then calls ProcUIShutdown. We just need
+    // to return from run() so main() can let the App destructor (and
+    // therefore SDL_Quit) run.
 }
 
 void App::quit() {
+    elog("App::quit called -- setting m_running=false (no SYSLaunchMenu)");
     m_running = false;
 }
 void App::startExit() {
+    // Just stop the main loop. SDL2-wuhb is the single owner of the
+    // ProcUI/SYSLaunchMenu handshake: SDL_Quit's WIIU_VideoQuit detects
+    // !exitingProcUI and calls SYSLaunchMenu + drains ProcUI itself.
+    // Calling SYSLaunchMenu here too would issue it twice in flight
+    // (once now, once during SDL_Quit) and reproduce the original
+    // "Wii U Menu loading" hang. See Codex review 2026-05-..
+    elog("App::startExit called -- m_running=false, SDL_Quit will own SYSLaunchMenu");
     m_exiting = true;
     m_running = false;
-#ifdef __WUT__
-    SYSLaunchMenu();
-#endif
 }
 
 void App::pushScreen(std::unique_ptr<Screen> screen) {
@@ -228,11 +250,15 @@ void App::pushScreen(std::unique_ptr<Screen> screen) {
 }
 
 void App::popScreen() {
+    elogf("App::popScreen -- stack=%zu before", m_screens.size());
     if (!m_screens.empty()) {
         m_screens.back()->onExit();
         m_screens.pop_back();
     }
-    if (m_screens.empty()) m_running = false;
+    if (m_screens.empty()) {
+        elog("App::popScreen -- stack empty, setting m_running=false (no SYSLaunchMenu)");
+        m_running = false;
+    }
 }
 
 void App::update() {

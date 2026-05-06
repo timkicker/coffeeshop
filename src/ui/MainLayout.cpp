@@ -158,8 +158,14 @@ void MainLayout::handleInput(const Input& input) {
         // Stop and join the fetch thread before exiting -- detach() risks the
         // background thread accessing m_repo / m_repoStatus after the screen
         // is destroyed.
+        LOG_INFO("MainLayout: minus pressed, signalling fetch thread to stop");
         m_stopFetch = true;
-        if (m_fetchThread.joinable()) m_fetchThread.join();
+        if (m_fetchThread.joinable()) {
+            LOG_INFO("MainLayout: joining fetch thread...");
+            m_fetchThread.join();
+            LOG_INFO("MainLayout: fetch thread joined");
+        }
+        LOG_INFO("MainLayout: calling App::startExit");
         m_app->startExit();
         return;
     }
@@ -177,13 +183,19 @@ void MainLayout::handleInput(const Input& input) {
         Tab before = m_activeTab;
         if      (m_activeTab == Tab::Installed) { m_activeTab = Tab::Browse;    AudioManager::get().playSound(SoundId::Navigate); }
         else if (m_activeTab == Tab::Settings)  { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
-        if (before != m_activeTab) persistUiState();
+        if (before != m_activeTab) {
+            LOG_INFO("MainLayout: tab L -> %d", (int)m_activeTab);
+            persistUiState();
+        }
     }
     if (input.r) {
         Tab before = m_activeTab;
         if      (m_activeTab == Tab::Browse)    { m_activeTab = Tab::Installed; AudioManager::get().playSound(SoundId::Navigate); }
         else if (m_activeTab == Tab::Installed) { m_activeTab = Tab::Settings;  m_settingsDirty = true; AudioManager::get().playSound(SoundId::Navigate); }
-        if (before != m_activeTab) persistUiState();
+        if (before != m_activeTab) {
+            LOG_INFO("MainLayout: tab R -> %d", (int)m_activeTab);
+            persistUiState();
+        }
     }
 
     if (m_activeTab == Tab::Browse)    handleBrowseInput(input);

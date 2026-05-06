@@ -2,6 +2,7 @@
 #include "ui/RegionSelectScreen.h"
 #include "mods/InstallHelper.h"
 #include "util/TextCache.h"
+#include "util/Logger.h"
 #include "mods/InstallChecker.h"
 #include "mods/InstalledScanner.h"
 #include "net/DownloadQueue.h"
@@ -38,6 +39,7 @@ void DetailScreen::handleInput(const Input& input) {
 
     if (m_confirmUninstall) {
         if (input.a) {
+            LOG_INFO("DetailScreen: confirm uninstall '%s'", m_mod.id.c_str());
             auto mods = InstalledScanner::scan();
             for (auto& inst : mods) {
                 if (inst.id == m_mod.id) {
@@ -47,7 +49,10 @@ void DetailScreen::handleInput(const Input& input) {
             }
             m_app->popScreen();
         }
-        if (input.b) m_confirmUninstall = false;
+        if (input.b) {
+            LOG_INFO("DetailScreen: cancel uninstall '%s'", m_mod.id.c_str());
+            m_confirmUninstall = false;
+        }
         return;
     }
 
@@ -58,18 +63,24 @@ void DetailScreen::handleInput(const Input& input) {
     if (!m_loaded) return;
 
     if (input.y && m_installStatus.installed) {
+        LOG_INFO("DetailScreen: prompt uninstall '%s'", m_mod.id.c_str());
         m_confirmUninstall = true;
         return;
     }
 
     if (input.a && !m_titleIds.empty()) {
-        if (m_installStatus.installed && !m_installStatus.updateAvail) return;
+        if (m_installStatus.installed && !m_installStatus.updateAvail) {
+            LOG_INFO("DetailScreen: A pressed but '%s' already installed at latest version", m_mod.id.c_str());
+            return;
+        }
         auto entries = InstallHelper::detectInstalled(m_titleIds);
         if (entries.size() == 1) {
+            LOG_INFO("DetailScreen: install '%s' to title %s", m_mod.id.c_str(), entries[0].id.c_str());
             AudioManager::get().playSound(SoundId::DownloadStart);
             DownloadQueue::get().enqueue(m_mod, entries[0].id);
             m_app->popScreen();
         } else {
+            LOG_INFO("DetailScreen: %zu title regions found, opening RegionSelect for '%s'", entries.size(), m_mod.id.c_str());
             m_app->pushScreen(std::make_unique<RegionSelectScreen>(
                 m_app, m_mod, entries));
         }

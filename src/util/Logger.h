@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <unistd.h>
+#include "util/LogClock.h"
 
 class Logger {
 public:
@@ -17,10 +18,13 @@ public:
         m_file = fopen(path.c_str(), "w");
         m_path = path;
         if (m_file) {
-            fprintf(m_file, "LOGGER READY\n");
+            double t = LogClock::elapsedSec();
+            fprintf(m_file, "[%8.3f] LOGGER READY\n", t);
             fflush(m_file);
             fsync(fileno(m_file));
-            pushLine_locked("LOGGER READY");
+            char buf[64];
+            snprintf(buf, sizeof(buf), "[%8.3f] LOGGER READY", t);
+            pushLine_locked(buf);
         }
     }
 
@@ -28,7 +32,8 @@ public:
         std::lock_guard<std::mutex> lock(m_mutex);
         // File output (always)
         if (m_file) {
-            fprintf(m_file, "[%s] ", level);
+            double t = LogClock::elapsedSec();
+            fprintf(m_file, "[%8.3f] [%s] ", t, level);
             // vfprintf consumes args, so capture once for both file + buffer
             va_list args_copy;
             va_copy(args_copy, args);
@@ -39,7 +44,7 @@ public:
 
             // In-memory rolling buffer for the in-app log viewer
             char buf[1024];
-            int n = snprintf(buf, sizeof(buf), "[%s] ", level);
+            int n = snprintf(buf, sizeof(buf), "[%8.3f] [%s] ", t, level);
             if (n > 0 && n < (int)sizeof(buf))
                 vsnprintf(buf + n, sizeof(buf) - n, fmt, args_copy);
             pushLine_locked(buf);
