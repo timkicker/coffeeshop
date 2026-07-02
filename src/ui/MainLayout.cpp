@@ -3,6 +3,7 @@
 #include "ui/DetailScreen.h"
 #include "ui/DownloadQueueScreen.h"
 #include "ui/TagFilterScreen.h"
+#include "ui/BrowseScroll.h"
 #include "net/DownloadQueue.h"
 #include <sysapp/launch.h>
 #include "mods/InstalledScanner.h"
@@ -211,6 +212,7 @@ void MainLayout::handleBrowseInput(const Input& input) {
     auto& mods     = games[m_selectedGame].mods;
     int   modCount = (int)mods.size();
     int   cols     = CARDS_PER_ROW;
+    int   prevGame = m_selectedGame;
 
     if (input.right) {
         if ((m_selectedMod % cols) < cols - 1 && m_selectedMod + 1 < modCount) {
@@ -228,6 +230,18 @@ void MainLayout::handleBrowseInput(const Input& input) {
     }
     if (input.down) { int n = m_selectedMod + cols; if (n < modCount) { m_selectedMod = n; AudioManager::get().playSound(SoundId::Navigate); } }
     if (input.up)   { int p = m_selectedMod - cols; if (p >= 0)       { m_selectedMod = p; AudioManager::get().playSound(SoundId::Navigate); } }
+
+    // Reset scroll when the selected game changes, then ensure the new cursor
+    // is visible. Otherwise just adjust scroll if cursor moved off the visible
+    // rows. visibleRows is derived from the actual window height minus the
+    // grid top (header/tab strip) and a small bottom strip for the hint line.
+    if (m_selectedGame != prevGame) m_browseScrollRow = 0;
+    const int H = m_app->screenHeight();
+    const int bottomHint = 30;
+    int visibleRows = (H - GRID_TOP - bottomHint) / (CARD_H + CARD_PAD);
+    if (visibleRows < 1) visibleRows = 1;
+    int selRow = m_selectedMod / cols;
+    m_browseScrollRow = computeBrowseScroll(m_browseScrollRow, selRow, visibleRows);
 
     // Pre-warm ImageCache for the currently-selected mod's images. When the
     // user presses A, DetailScreen finds them already cached -> no freeze.
@@ -261,6 +275,7 @@ void MainLayout::handleBrowseInput(const Input& input) {
             [this](std::set<std::string> picked) {
                 m_activeTags = std::move(picked);
                 m_selectedMod = 0; // reset cursor when filter changes
+                m_browseScrollRow = 0;
                 persistUiState();
             }));
     }
@@ -682,11 +697,19 @@ void MainLayout::renderBrowse(SDL_Renderer* renderer) {
         default: break;
     }
     auto& mods = sortedMods;
+    // Skip cards above the visible scroll window or below the bottom hint
+    // line. Without this, render walks through hundreds of cards offscreen
+    // for large repos, and the cursor visually disappears past the screen.
+    const int rowH = CARD_H + CARD_PAD;
+    const int bottomHint = 30;
     for (int i = 0; i < (int)mods.size(); i++) {
         auto& mod = mods[i];
         bool  sel = (i == m_selectedMod);
+        int   row = i / CARDS_PER_ROW;
+        if (row < m_browseScrollRow) continue;          // above viewport
         int   x   = cx + CARD_PAD + (i % CARDS_PER_ROW) * (CARD_W + CARD_PAD);
-        int   y   = GRID_TOP      + (i / CARDS_PER_ROW) * (CARD_H + CARD_PAD);
+        int   y   = GRID_TOP      + (row - m_browseScrollRow) * rowH;
+        if (y + CARD_H > H - bottomHint) break;          // below viewport (rows are in order)
 
         SDL_SetRenderDrawColor(renderer, 25, 25, 40, 255);
         SDL_Rect card = {x, y, CARD_W, CARD_H};

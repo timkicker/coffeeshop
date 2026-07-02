@@ -76,6 +76,7 @@ private:
     Repo                    m_repo;
     int m_selectedGame = 0;
     int m_selectedMod  = 0;
+    int m_browseScrollRow = 0;  // top visible row in the Browse card grid
 
     enum class SortMode { Default, NameAZ, Version };
     SortMode m_sortMode = SortMode::Default;

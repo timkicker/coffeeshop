@@ -31,6 +31,8 @@ add_executable(cupstore_tests
     test_http_client.cpp
     test_text_cache.cpp
     test_sha256.cpp
+    test_browse_scroll.cpp
+    test_input.cpp
     curl_mock.cpp
     stubs.cpp
     ${SRC}/mods/ConflictChecker.cpp
@@ -46,6 +48,7 @@ add_executable(cupstore_tests
     ${SRC}/net/HttpClient.cpp
     ${SRC}/util/TextCache.cpp
     ${SRC}/util/sha256.cpp
+    ${SRC}/app/Input.cpp
 )
 # TextCache pulls SDL headers; we only test the no-renderer paths so functions
 # can be stubbed.

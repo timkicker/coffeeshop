@@ -79,11 +79,27 @@ bool App::init() {
     elog("Network: socket_lib_init done, network ready");
 #endif
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) != 0) {
+    // Do NOT add SDL_INIT_GAMECONTROLLER. SDL2-wuhb crashes the RPX loader
+    // before main() runs ("failed to load payload"). We only need
+    // SDL_JOYBUTTONDOWN events anyway, not the SDL_GameController API.
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) != 0) {
         LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
         return false;
     }
     elog("SDL_Init OK");
+    // Open every already-connected joystick so SDL starts forwarding events
+    // for it. SDL only emits SDL_JOYBUTTONDOWN from opened joysticks. New
+    // devices that plug in later are handled in App::run via
+    // SDL_JOYDEVICEADDED.
+    {
+        int n = SDL_NumJoysticks();
+        elogf("SDL: %d joystick(s) connected at startup", n);
+        for (int i = 0; i < n; i++) {
+            SDL_Joystick* j = SDL_JoystickOpen(i);
+            if (j) elogf("  opened: %s", SDL_JoystickName(j));
+            else   elogf("  open failed for joystick %d: %s", i, SDL_GetError());
+        }
+    }
     if (TTF_Init() != 0) {
         LOG_ERROR("TTF_Init failed: %s", TTF_GetError());
         return false;
@@ -204,9 +220,33 @@ void App::run() {
         if (frameNum < 10) elogf("frame %d begin", frameNum);
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                elog("got SDL_QUIT");
-                m_running = false;
+            switch (event.type) {
+                case SDL_QUIT:
+                    elog("got SDL_QUIT");
+                    m_running = false;
+                    break;
+                case SDL_JOYDEVICEADDED: {
+                    // SDL won't deliver button events from a joystick until
+                    // someone opens it. Pattern from fortheusers/chesto.
+                    SDL_Joystick* j = SDL_JoystickOpen(event.jdevice.which);
+                    if (j) elogf("joystick connected: %s", SDL_JoystickName(j));
+                    break;
+                }
+                case SDL_JOYDEVICEREMOVED: {
+                    SDL_Joystick* j = SDL_JoystickFromInstanceID(event.jdevice.which);
+                    if (j) {
+                        elogf("joystick disconnected: %s", SDL_JoystickName(j));
+                        SDL_JoystickClose(j);
+                    }
+                    break;
+                }
+                case SDL_JOYBUTTONDOWN:
+                    // Single code path for all Wii U controllers: GamePad,
+                    // Pro Controller, Wii Remote (+ extensions), Classic.
+                    // SDL2-wuhb's joystick driver normalises every device to
+                    // the same button-index space (see Input.h enum).
+                    Input::onJoyButtonDown(event.jbutton.button);
+                    break;
             }
         }
         update();
