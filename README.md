@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> CoffeeShop is still being worked on. There won't be a new release before March 2027 though, because I'm abroad until then and don't have a Wii U with me. Too many things have worked fine in Cemu and then broken on real hardware, so nothing gets released without testing it on a console first. Until then v0.1.9 stays the latest version.
+
 <p align="center">
   <img alt="CoffeeShop" src="meta/branding/coffeeshop_banner_with_logo_xlarge_fixed.png" width="480">
 </p>
